@@ -232,8 +232,8 @@ typename TileMontage< TImageType, TCoordinate >::TransformPointer
 TileMontage< TImageType, TCoordinate >
 ::RegisterPair( TileIndexType fixed, TileIndexType moving )
 {
-  DataObjectPointerArraySizeType lFixedInd = nDIndexToLinearIndex( fixed );
-  DataObjectPointerArraySizeType lMovingInd = nDIndexToLinearIndex( moving );
+  SizeValueType lFixedInd = nDIndexToLinearIndex( fixed );
+  SizeValueType lMovingInd = nDIndexToLinearIndex( moving );
 
   auto mImage = this->GetImage( moving, false );
   m_PCM->SetFixedImage( this->GetImage( fixed, false ) );
@@ -247,7 +247,7 @@ TileMontage< TImageType, TCoordinate >
   m_FFTCache[lMovingInd] = m_PCM->GetMovingImageFFT(); // certrainly not null
 
   const typename PCMType::OffsetVector& offsets = m_PCM->GetOffsets();
-  DataObjectPointerArraySizeType regLinearIndex = lMovingInd;
+  SizeValueType regLinearIndex = lMovingInd;
   for (unsigned d = 0; d < ImageDimension; d++)
     {
     if (fixed[d] != moving[d]) // this is the different dimension
@@ -326,8 +326,8 @@ TileMontage< TImageType, TCoordinate >
           TransformPointer t = this->RegisterPair( referenceIndex, currentIndex );
           t->Compose( m_CurrentAdjustments[this->nDIndexToLinearIndex( referenceIndex )], true );
           transforms.push_back( t );
-          DataObjectPointerArraySizeType linearIndex = this->nDIndexToLinearIndex( currentIndex );
-          DataObjectPointerArraySizeType transformIndex = regDim * m_LinearMontageSize + linearIndex;
+          SizeValueType linearIndex = this->nDIndexToLinearIndex( currentIndex );
+          SizeValueType transformIndex = regDim * m_LinearMontageSize + linearIndex;
           confidences.push_back( m_CandidateConfidences[transformIndex][0] );
           }
         }
@@ -472,7 +472,74 @@ void
 TileMontage< TImageType, TCoordinate >
 ::OptimizeTiles()
 {
-  // optimize m_CurrentAdjustments
+  const unsigned maxIter = 10 * m_LinearMontageSize;
+  bool outlierExists = true;
+  while ( outlierExists )
+    {
+    unsigned iteration = 0;
+    double rmse; // root mean squared error
+    do
+      {
+      double sse = 0.0; // sum of squared errors
+      for ( SizeValueType i = 0; i < m_LinearMontageSize; i++ )
+        {
+        TileIndexType currentIndex = this->LinearIndexTonDIndex( i );
+        std::vector< TransformPointer > transforms;
+        std::vector< double > confidences;
+        for ( unsigned d = 0; d < ImageDimension; d++ )
+          {
+          if ( currentIndex[d] > 0 ) // we are not at the min edge along this dimension
+            {
+            TileIndexType referenceIndex = currentIndex;
+            referenceIndex[d] = currentIndex[d] - 1;
+            SizeValueType transformIndex = d * m_LinearMontageSize + i;
+            TransformPointer t = m_TransformCandidates[transformIndex][0];
+            t->Compose( m_CurrentAdjustments[this->nDIndexToLinearIndex( referenceIndex )], true );
+            transforms.push_back( t );
+            confidences.push_back( m_CandidateConfidences[transformIndex][0] );
+            }
+          if ( currentIndex[d] < m_MontageSize[d] - 1 ) // we are not at the max edge along this dimension
+            {
+            TileIndexType referenceIndex = currentIndex;
+            referenceIndex[d] = currentIndex[d] + 1;
+            SizeValueType linRefIndex = this->nDIndexToLinearIndex( referenceIndex );
+            SizeValueType transformIndex = d * m_LinearMontageSize + linRefIndex;
+            TransformPointer t = TransformType::New();
+            t->SetOffset( -m_TransformCandidates[transformIndex][0]->GetOffset() ); // inverse
+            t->Compose( m_CurrentAdjustments[linRefIndex], true );
+            transforms.push_back( t );
+            confidences.push_back( m_CandidateConfidences[transformIndex][0] );
+            }
+          }
+        
+        // make weighted average
+        TransformPointer t = TransformType::New(); // identity i.e. 0-translation by default
+        typename TransformType::OutputVectorType offset = t->GetOffset();
+        double confidenceSum = 0.0;
+        for ( unsigned ti = 0; ti < transforms.size(); ti++ )
+          {
+          confidenceSum += confidences[ti];
+          offset += transforms[ti]->GetOffset() * confidences[ti]; 
+          }
+        offset /= confidenceSum;
+        t->SetOffset( offset );
+
+        auto spacing = this->GetImage( currentIndex, true )->GetSpacing();
+        typename TransformType::OutputVectorType oldOffset = m_CurrentAdjustments[i]->GetOffset();
+        for ( unsigned d = 0; d < ImageDimension; d++ )
+          {
+          double diff = ( oldOffset[d] - offset[d] ) / spacing[d];
+          sse += diff * diff;
+          }
+        m_CurrentAdjustments[i] = t;
+        }
+      rmse = std::sqrt( sse / m_LinearMontageSize );
+      ++iteration;
+      }
+    while ( iteration < maxIter && rmse > 0.1 );
+
+    outlierExists = false;
+    }
 }
 
 template< typename TImageType, typename TCoordinate >

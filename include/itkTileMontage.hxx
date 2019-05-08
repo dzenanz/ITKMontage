@@ -468,11 +468,69 @@ TileMontage< TImageType, TCoordinate >
 }
 
 template< typename TImageType, typename TCoordinate >
+double
+TileMontage< TImageType, TCoordinate >
+::OptimizeTile( DataObject::DataObjectPointerArraySizeType linearIndex )
+{
+  TileIndexType currentIndex = this->LinearIndexTonDIndex( linearIndex );
+  std::vector< TransformPointer > transforms;
+  std::vector< double > confidences;
+  for ( unsigned d = 0; d < ImageDimension; d++ )
+    {
+    if ( currentIndex[d] > 0 ) // we are not at the min edge along this dimension
+      {
+      TileIndexType referenceIndex = currentIndex;
+      referenceIndex[d] = currentIndex[d] - 1;
+      SizeValueType transformIndex = d * m_LinearMontageSize + linearIndex;
+      TransformPointer t = m_TransformCandidates[transformIndex][0];
+      t->Compose( m_CurrentAdjustments[this->nDIndexToLinearIndex( referenceIndex )], true );
+      transforms.push_back( t );
+      confidences.push_back( m_CandidateConfidences[transformIndex][0] );
+      }
+    if ( currentIndex[d] < m_MontageSize[d] - 1 ) // we are not at the max edge along this dimension
+      {
+      TileIndexType referenceIndex = currentIndex;
+      referenceIndex[d] = currentIndex[d] + 1;
+      SizeValueType linRefIndex = this->nDIndexToLinearIndex( referenceIndex );
+      SizeValueType transformIndex = d * m_LinearMontageSize + linRefIndex;
+      TransformPointer t = TransformType::New();
+      t->SetOffset( -m_TransformCandidates[transformIndex][0]->GetOffset() ); // inverse
+      t->Compose( m_CurrentAdjustments[linRefIndex], true );
+      transforms.push_back( t );
+      confidences.push_back( m_CandidateConfidences[transformIndex][0] );
+      }
+    }
+  
+  // make weighted average
+  TransformPointer t = TransformType::New(); // identity linearIndex.e. 0-translation by default
+  typename TransformType::OutputVectorType offset = t->GetOffset();
+  double confidenceSum = 0.0;
+  for ( unsigned ti = 0; ti < transforms.size(); ti++ )
+    {
+    confidenceSum += confidences[ti];
+    offset += transforms[ti]->GetOffset() * confidences[ti]; 
+    }
+  offset /= confidenceSum;
+  t->SetOffset( offset );
+
+  auto spacing = this->GetImage( currentIndex, true )->GetSpacing();
+  typename TransformType::OutputVectorType oldOffset = m_CurrentAdjustments[linearIndex]->GetOffset();
+  double sse = 0.0;
+  for ( unsigned d = 0; d < ImageDimension; d++ )
+    {
+    double diff = ( oldOffset[d] - offset[d] ) / spacing[d];
+    sse += diff * diff;
+    }
+  m_CurrentAdjustments[linearIndex] = t;
+  return sse;
+}
+
+template< typename TImageType, typename TCoordinate >
 void
 TileMontage< TImageType, TCoordinate >
 ::OptimizeTiles()
 {
-  const unsigned maxIter = 10 * m_LinearMontageSize;
+  const unsigned maxIter = 10 + std::pow( m_LinearMontageSize, 1.0 / ImageDimension );
   bool outlierExists = true;
   while ( outlierExists )
     {
@@ -481,57 +539,24 @@ TileMontage< TImageType, TCoordinate >
     do
       {
       double sse = 0.0; // sum of squared errors
-      for ( SizeValueType i = 0; i < m_LinearMontageSize; i++ )
+      // alternate direction of passing through the tiles
+      // otherwise bottom or right tile tends to creep away from the center
+      if ( iteration % 2 == 0 )
         {
-        TileIndexType currentIndex = this->LinearIndexTonDIndex( i );
-        std::vector< TransformPointer > transforms;
-        std::vector< double > confidences;
-        for ( unsigned d = 0; d < ImageDimension; d++ )
+        for ( SizeValueType i = 0; i < m_LinearMontageSize; i++ )
           {
-          if ( currentIndex[d] > 0 ) // we are not at the min edge along this dimension
-            {
-            TileIndexType referenceIndex = currentIndex;
-            referenceIndex[d] = currentIndex[d] - 1;
-            SizeValueType transformIndex = d * m_LinearMontageSize + i;
-            TransformPointer t = m_TransformCandidates[transformIndex][0];
-            t->Compose( m_CurrentAdjustments[this->nDIndexToLinearIndex( referenceIndex )], true );
-            transforms.push_back( t );
-            confidences.push_back( m_CandidateConfidences[transformIndex][0] );
-            }
-          if ( currentIndex[d] < m_MontageSize[d] - 1 ) // we are not at the max edge along this dimension
-            {
-            TileIndexType referenceIndex = currentIndex;
-            referenceIndex[d] = currentIndex[d] + 1;
-            SizeValueType linRefIndex = this->nDIndexToLinearIndex( referenceIndex );
-            SizeValueType transformIndex = d * m_LinearMontageSize + linRefIndex;
-            TransformPointer t = TransformType::New();
-            t->SetOffset( -m_TransformCandidates[transformIndex][0]->GetOffset() ); // inverse
-            t->Compose( m_CurrentAdjustments[linRefIndex], true );
-            transforms.push_back( t );
-            confidences.push_back( m_CandidateConfidences[transformIndex][0] );
-            }
+          sse += OptimizeTile( i );
           }
-        
-        // make weighted average
-        TransformPointer t = TransformType::New(); // identity i.e. 0-translation by default
-        typename TransformType::OutputVectorType offset = t->GetOffset();
-        double confidenceSum = 0.0;
-        for ( unsigned ti = 0; ti < transforms.size(); ti++ )
+        }
+      else
+        {
+        SizeValueType i = m_LinearMontageSize;
+        do
           {
-          confidenceSum += confidences[ti];
-          offset += transforms[ti]->GetOffset() * confidences[ti]; 
+          --i;
+          sse += OptimizeTile( i );
           }
-        offset /= confidenceSum;
-        t->SetOffset( offset );
-
-        auto spacing = this->GetImage( currentIndex, true )->GetSpacing();
-        typename TransformType::OutputVectorType oldOffset = m_CurrentAdjustments[i]->GetOffset();
-        for ( unsigned d = 0; d < ImageDimension; d++ )
-          {
-          double diff = ( oldOffset[d] - offset[d] ) / spacing[d];
-          sse += diff * diff;
-          }
-        m_CurrentAdjustments[i] = t;
+        while ( i > 0 );
         }
       rmse = std::sqrt( sse / m_LinearMontageSize );
       ++iteration;

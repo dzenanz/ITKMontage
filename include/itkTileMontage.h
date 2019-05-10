@@ -240,7 +240,7 @@ protected:
                                       typename ImageType::Pointer tileInformation );
 
   /** Returns sum of squared errors. */
-  double OptimizeTile( DataObjectPointerArraySizeType linearIndex );
+  TransformPointer OptimizeTile( DataObjectPointerArraySizeType linearIndex, double& sse, bool onlyTopLeft );
 
   void OptimizeTiles();
 

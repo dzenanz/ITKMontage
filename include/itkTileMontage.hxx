@@ -24,6 +24,9 @@
 #include "itkMultiThreaderBase.h"
 #include "itkNumericTraits.h"
 
+#include "itk_eigen.h"
+#include ITK_EIGEN( Sparse )
+
 #include <algorithm>
 #include <cassert>
 
@@ -559,6 +562,22 @@ TileMontage< TImageType, TCoordinate >
       m_CurrentAdjustments.swap( newAdjustments ); // current=new but without deallocation
       }
 
+    // formulate global optimization as an overdetermined linear system
+    SizeValueType mullAll = 1; // multiplication of sizes along all dimensions
+    for ( unsigned d = 0; d < ImageDimension; d++ )
+      {
+      mullAll *= m_MontageSize[d];
+      }
+    SizeValueType nReg = 0; // number of equations = number of registration pairs
+    for ( unsigned d = 0; d < ImageDimension; d++ )
+      {
+      nReg += ( mullAll / m_MontageSize[d] ) * ( m_MontageSize[d] - 1 );
+      }
+
+    Eigen::SparseMatrix< TCoordinate, Eigen::RowMajor > regCoef( nReg, m_LinearMontageSize );
+    regCoef.reserve( Eigen::VectorXi::Constant( nReg, 2 ) ); // 2 non-zeroes per row
+    Eigen::Matrix< TCoordinate, Eigen::Dynamic, ImageDimension > translations( nReg, ImageDimension );
+    SizeValueType regIndex = 0;
     // calculate cost of each registration pair and detect outliers
     std::vector< double > cost( m_LinearMontageSize * ImageDimension, 0.0 );
     std::cout << "\nCosts:";
@@ -572,6 +591,16 @@ TileMontage< TImageType, TCoordinate >
         TileIndexType referenceIndex = currentIndex;
         referenceIndex[dim] = currentIndex[dim] - 1;
         SizeValueType refLinearIndex = this->nDIndexToLinearIndex( referenceIndex );
+
+        regCoef.insert( regIndex, linIndex ) = 1;
+        regCoef.insert( regIndex, refLinearIndex ) = -1;
+        typename TransformType::OutputVectorType candidateOffset = m_TransformCandidates[i][0]->GetOffset();
+        translations( regIndex ) = m_TransformCandidates[i][0]->GetOffset()[0]; // solve for x
+        for ( unsigned d = 0; d < ImageDimension; d++ )
+          {
+          translations( regIndex, d ) = candidateOffset[d]; // sign might need to be inverted
+          }
+        ++regIndex;
 
         TransformPointer t = TransformType::New();
         t->SetOffset( -m_CurrentAdjustments[linIndex]->GetOffset() ); // deep copy
@@ -593,6 +622,15 @@ TileMontage< TImageType, TCoordinate >
         }      
       }
     std::cout << std::endl;
+
+    std::cout << regCoef << std::endl;
+
+    regCoef.makeCompressed();
+    Eigen::LeastSquaresConjugateGradient< Eigen::SparseMatrix< TCoordinate > > solver;
+    solver.compute( regCoef );
+    Eigen::MatrixXf solutions( m_LinearMontageSize, ImageDimension );
+    solutions = solver.solve( regCoef );
+
 
     outlierExists = false;
     }

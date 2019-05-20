@@ -242,9 +242,6 @@ protected:
   /** Returns sum of squared errors. */
   TransformPointer OptimizeTile( DataObjectPointerArraySizeType linearIndex, double& sse, bool onlyTopLeft );
 
-  /** Calculate cost of each registration pair, respective to no adjustments. */
-  std::vector< TCoordinate > calculateCosts();
-
   void OptimizeTiles();
 
 private:

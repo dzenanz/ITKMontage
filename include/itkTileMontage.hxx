@@ -456,69 +456,26 @@ TileMontage< TImageType, TCoordinate >
 }
 
 template< typename TImageType, typename TCoordinate >
-typename TileMontage< TImageType, TCoordinate >::TransformPointer
+void
 TileMontage< TImageType, TCoordinate >
-::OptimizeTile( DataObject::DataObjectPointerArraySizeType linearIndex, double& sse, bool onlyTopLeft )
+::OptimizeTiles()
 {
-  TileIndexType currentIndex = this->LinearIndexTonDIndex( linearIndex );
-  std::vector< TransformPointer > transforms;
-  std::vector< double > confidences;
+  // formulate global optimization as an overdetermined linear system
+  SizeValueType mullAll = 1; // multiplication of sizes along all dimensions
   for ( unsigned d = 0; d < ImageDimension; d++ )
     {
-    if ( currentIndex[d] > 0 ) // we are not at the min edge along this dimension
-      {
-      TileIndexType referenceIndex = currentIndex;
-      referenceIndex[d] = currentIndex[d] - 1;
-      SizeValueType transformIndex = d * m_LinearMontageSize + linearIndex;
-      TransformPointer t = m_TransformCandidates[transformIndex][0];
-      t->Compose( m_CurrentAdjustments[this->nDIndexToLinearIndex( referenceIndex )], true );
-      transforms.push_back( t );
-      confidences.push_back( m_CandidateConfidences[transformIndex][0] );
-      }
-    if ( !onlyTopLeft && currentIndex[d] < m_MontageSize[d] - 1 ) // we are not at the max edge along this dimension
-      {
-      TileIndexType referenceIndex = currentIndex;
-      referenceIndex[d] = currentIndex[d] + 1;
-      SizeValueType linRefIndex = this->nDIndexToLinearIndex( referenceIndex );
-      SizeValueType transformIndex = d * m_LinearMontageSize + linRefIndex;
-      TransformPointer t = TransformType::New();
-      t->SetOffset( -m_TransformCandidates[transformIndex][0]->GetOffset() ); // inverse
-      t->Compose( m_CurrentAdjustments[linRefIndex], true );
-      transforms.push_back( t );
-      confidences.push_back( m_CandidateConfidences[transformIndex][0] );
-      }
+    mullAll *= m_MontageSize[d];
     }
-  
-  // make weighted average
-  TransformPointer t = TransformType::New(); // identity i.e. 0-translation by default
-  typename TransformType::OutputVectorType offset = t->GetOffset();
-  double confidenceSum = 1e-20;
-  for ( unsigned ti = 0; ti < transforms.size(); ti++ )
-    {
-    confidenceSum += confidences[ti];
-    offset += transforms[ti]->GetOffset() * confidences[ti]; 
-    }
-  offset /= confidenceSum;
-  t->SetOffset( offset );
-
-  auto spacing = this->GetImage( currentIndex, true )->GetSpacing();
-  typename TransformType::OutputVectorType oldOffset = m_CurrentAdjustments[linearIndex]->GetOffset();
-  sse = 0.0;
+  SizeValueType nReg = 0; // number of equations = number of registration pairs
   for ( unsigned d = 0; d < ImageDimension; d++ )
     {
-    double diff = ( oldOffset[d] - offset[d] ) / spacing[d]; // in units of pixel spacings
-    sse += diff * diff;
+    nReg += ( mullAll / m_MontageSize[d] ) * ( m_MontageSize[d] - 1 );
     }
-  return t;
-}
 
-template< typename TImageType, typename TCoordinate >
-std::vector< TCoordinate >
-TileMontage< TImageType, TCoordinate >
-::calculateCosts()
-{  
-  std::vector< TCoordinate > cost( m_LinearMontageSize * ImageDimension, 0.0 );
-  std::cout << "\nCosts:";
+  Eigen::SparseMatrix< TCoordinate, Eigen::RowMajor > regCoef( nReg + 1, m_LinearMontageSize );
+  regCoef.reserve( Eigen::VectorXi::Constant( nReg + 1, 2 ) ); // 2 non-zeroes per row
+  Eigen::Matrix< TCoordinate, Eigen::Dynamic, ImageDimension > translations( nReg + 1, ImageDimension );
+  SizeValueType regIndex = 0;
   for ( SizeValueType i = 0; i < m_LinearMontageSize * ImageDimension; i++ )
     {
     if ( !m_TransformCandidates[i].empty() && m_TransformCandidates[i][0] != nullptr )
@@ -530,138 +487,39 @@ TileMontage< TImageType, TCoordinate >
       referenceIndex[dim] = currentIndex[dim] - 1;
       SizeValueType refLinearIndex = this->nDIndexToLinearIndex( referenceIndex );
 
-      TransformPointer t = TransformType::New();
-      t->SetOffset( -m_CurrentAdjustments[linIndex]->GetOffset() ); // deep copy
-      t->Compose( m_TransformCandidates[i][0] );
-      // t should have no translation now
-
-      auto spacing = this->GetImage( currentIndex, true )->GetSpacing();
-      typename TransformType::OutputVectorType offset = t->GetOffset();
-      TCoordinate dist = 0.0;
+      regCoef.insert( regIndex, linIndex ) = 1;
+      regCoef.insert( regIndex, refLinearIndex ) = -1;
+      typename TransformType::OutputVectorType candidateOffset = m_TransformCandidates[i][0]->GetOffset();
       for ( unsigned d = 0; d < ImageDimension; d++ )
         {
-        TCoordinate diff = offset[d] / spacing[d];
-        dist += diff * diff;
+        translations( regIndex, d ) = candidateOffset[d];
         }
-      dist = std::sqrt( dist / ImageDimension ); // Euclidean distance
-      cost[i] = dist;
-      std::cout << " " << i << ": " << dist;
+      ++regIndex;
       }      
     }
   std::cout << std::endl;
-  return cost;
-}
 
-template< typename TImageType, typename TCoordinate >
-void
-TileMontage< TImageType, TCoordinate >
-::OptimizeTiles()
-{
-  double sseSingle; // for output parameter passing
-
-  // classic positioning
-  for ( SizeValueType i = 0; i < m_LinearMontageSize; i++ )
+  regCoef.insert( regIndex, 0 ) = 1; // tile 0,0...0
+  for ( unsigned d = 0; d < ImageDimension; d++ )
     {
-    m_CurrentAdjustments[i] = OptimizeTile( i, sseSingle, true );
+    translations( regIndex, d ) = 0; // should have position 0,0...0
     }
 
   const unsigned maxIter = 10 + std::pow( m_LinearMontageSize, 1.0 / ImageDimension );
   bool outlierExists = true;
-  std::vector< TransformPointer > newAdjustments( m_LinearMontageSize );
+  unsigned iteration = 0;
   while ( outlierExists )
     {
-    unsigned iteration = 0;
-    TCoordinate rmse = 0.0; // root mean squared error
-    while ( iteration < maxIter && rmse > 0.1 )
-      {
-      TCoordinate sse = 0.0; // sum of squared errors
-     
-      // alternate direction of passing through the tiles
-      // otherwise bottom or right tile tends to creep away from the center
-      if ( iteration % 2 == 0 )
-        {
-        for ( SizeValueType i = 0; i < m_LinearMontageSize; i++ )
-          {
-          newAdjustments[i] = OptimizeTile( i, sseSingle, false );
-          sse += sseSingle;
-          }
-        }
-      else
-        {
-        SizeValueType i = m_LinearMontageSize;
-        do
-          {
-          --i;
-          newAdjustments[i] = OptimizeTile( i, sseSingle, false );
-          sse += sseSingle;
-          }
-        while ( i > 0 );
-        }
-      rmse = std::sqrt( sse / m_LinearMontageSize );
-      ++iteration;
-      m_CurrentAdjustments.swap( newAdjustments ); // current=new but without deallocation
-      }
-
-    std::vector< TCoordinate > cost = calculateCosts();
-
-    // formulate global optimization as an overdetermined linear system
-    SizeValueType mullAll = 1; // multiplication of sizes along all dimensions
-    for ( unsigned d = 0; d < ImageDimension; d++ )
-      {
-      mullAll *= m_MontageSize[d];
-      }
-    SizeValueType nReg = 0; // number of equations = number of registration pairs
-    for ( unsigned d = 0; d < ImageDimension; d++ )
-      {
-      nReg += ( mullAll / m_MontageSize[d] ) * ( m_MontageSize[d] - 1 );
-      }
-
-    Eigen::SparseMatrix< TCoordinate, Eigen::RowMajor > regCoef( nReg + 1, m_LinearMontageSize );
-    regCoef.reserve( Eigen::VectorXi::Constant( nReg + 1, 2 ) ); // 2 non-zeroes per row
-    Eigen::Matrix< TCoordinate, Eigen::Dynamic, ImageDimension > translations( nReg + 1, ImageDimension );
-    SizeValueType regIndex = 0; // so we start equations from index 1
-    // calculate cost of each registration pair and detect outliers
-    for ( SizeValueType i = 0; i < m_LinearMontageSize * ImageDimension; i++ )
-      {
-      if ( !m_TransformCandidates[i].empty() && m_TransformCandidates[i][0] != nullptr )
-        {
-        SizeValueType linIndex = i % m_LinearMontageSize;
-        unsigned dim = i / m_LinearMontageSize;
-        TileIndexType currentIndex = this->LinearIndexTonDIndex( linIndex );
-        TileIndexType referenceIndex = currentIndex;
-        referenceIndex[dim] = currentIndex[dim] - 1;
-        SizeValueType refLinearIndex = this->nDIndexToLinearIndex( referenceIndex );
-
-        regCoef.insert( regIndex, linIndex ) = 1;
-        regCoef.insert( regIndex, refLinearIndex ) = -1;
-        typename TransformType::OutputVectorType candidateOffset = m_TransformCandidates[i][0]->GetOffset();
-        for ( unsigned d = 0; d < ImageDimension; d++ )
-          {
-          translations( regIndex, d ) = candidateOffset[d]; // sign might need to be inverted
-          }
-        ++regIndex;
-        }      
-      }
-    std::cout << std::endl;
-
-    regCoef.insert( regIndex, 0 ) = 1; // tile 0,0...0
-    for ( unsigned d = 0; d < ImageDimension; d++ )
-      {
-      translations( regIndex, d ) = 0; // should have position 0,0...0
-      }
-
-    std::cout << "regCoef:\n" << regCoef;
-    std::cout << "translations:\n" << translations;
-
     regCoef.makeCompressed();
     Eigen::LeastSquaresConjugateGradient< Eigen::SparseMatrix< TCoordinate > > solver;
     solver.compute( regCoef );
     Eigen::Matrix< TCoordinate, Eigen::Dynamic, ImageDimension > solutions( m_LinearMontageSize, ImageDimension );
     Eigen::Matrix< TCoordinate, Eigen::Dynamic, ImageDimension > residuals( m_LinearMontageSize, ImageDimension );
     solutions = solver.solve( translations );
-
     residuals = regCoef * solutions - translations;
 
+    std::cout << "regCoef:\n" << regCoef;
+    std::cout << "translations:\n" << translations;
     std::cout << "\nsolutions:\n" << solutions;
     std::cout << std::endl << "c|s:" << std::endl;
     for ( SizeValueType i = 0; i < m_LinearMontageSize; i++ )
@@ -670,23 +528,41 @@ TileMontage< TImageType, TCoordinate >
       for ( unsigned d = 0; d < ImageDimension; d++ )
         {
         std::cout << " " << cOffset[d] << '|' << solutions( i, d );
+        cOffset[d] = solutions( i, d );
         }
+      m_CurrentAdjustments[i]->SetOffset( cOffset );
       std::cout << std::endl;
       }
 
+    TCoordinate maxCost = 0;
+    SizeValueType maxIndex;
     std::cout << "\nresiduals:\n";
     for ( SizeValueType i = 0; i < nReg + 1; i++ )
       {
+      TCoordinate cost = 0;
       std::cout << 'R' << i << ':';
-      for (unsigned d = 0; d < ImageDimension; d++)
+      for ( unsigned d = 0; d < ImageDimension; d++ )
         {
         std::cout << ' ' << residuals( i, d );
+        cost += residuals( i, d ) * residuals( i, d );
         }
       std::cout << std::endl;
+      if ( cost > maxCost )
+        {
+        maxCost = cost;
+        maxIndex = i;
+        }
       }
-    std::cout << std::endl;  
+    std::cout << std::endl;
+    maxCost = std::sqrt( maxCost ); // MSE -> RMSE
+    if ( maxCost < 0.1 )
+      {
+      outlierExists = false;
+      }
+    else // eliminate the problematic registraition
+      {
 
-    outlierExists = false;
+      }
     }
 }
 

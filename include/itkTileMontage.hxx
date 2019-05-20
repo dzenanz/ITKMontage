@@ -625,7 +625,7 @@ TileMontage< TImageType, TCoordinate >
     regCoef.insert( regIndex, 0 ) = 1; // tile 0,0...0
     for ( unsigned d = 0; d < ImageDimension; d++ )
       {
-        translations( regIndex, d ) = 0; // should have position 0,0...0
+      translations( regIndex, d ) = 0; // should have position 0,0...0
       }
 
     std::cout << "regCoef:\n" << regCoef;
@@ -635,7 +635,10 @@ TileMontage< TImageType, TCoordinate >
     Eigen::LeastSquaresConjugateGradient< Eigen::SparseMatrix< TCoordinate > > solver;
     solver.compute( regCoef );
     Eigen::Matrix< TCoordinate, Eigen::Dynamic, ImageDimension > solutions( m_LinearMontageSize, ImageDimension );
+    Eigen::Matrix< TCoordinate, Eigen::Dynamic, ImageDimension > residuals( m_LinearMontageSize, ImageDimension );
     solutions = solver.solve( translations );
+
+    residuals = regCoef * solutions - translations;
 
     std::cout << "\nsolutions:\n" << solutions;
     std::cout << std::endl << "c|s:" << std::endl;
@@ -648,7 +651,18 @@ TileMontage< TImageType, TCoordinate >
         }
       std::cout << std::endl;
       }
-    std::cout << std::endl;
+
+    std::cout << "\nresiduals:\n";
+    for ( SizeValueType i = 0; i < nReg + 1; i++ )
+      {
+      std::cout << 'R' << i << ':';
+      for (unsigned d = 0; d < ImageDimension; d++)
+        {
+        std::cout << ' ' << residuals( i, d );
+        }
+      std::cout << std::endl;
+      }
+    std::cout << std::endl;  
 
     outlierExists = false;
     }

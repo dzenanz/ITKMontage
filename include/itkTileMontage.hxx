@@ -513,6 +513,46 @@ TileMontage< TImageType, TCoordinate >
 }
 
 template< typename TImageType, typename TCoordinate >
+std::vector< TCoordinate >
+TileMontage< TImageType, TCoordinate >
+::calculateCosts()
+{  
+  std::vector< TCoordinate > cost( m_LinearMontageSize * ImageDimension, 0.0 );
+  std::cout << "\nCosts:";
+  for ( SizeValueType i = 0; i < m_LinearMontageSize * ImageDimension; i++ )
+    {
+    if ( !m_TransformCandidates[i].empty() && m_TransformCandidates[i][0] != nullptr )
+      {
+      SizeValueType linIndex = i % m_LinearMontageSize;
+      unsigned dim = i / m_LinearMontageSize;
+      TileIndexType currentIndex = this->LinearIndexTonDIndex( linIndex );
+      TileIndexType referenceIndex = currentIndex;
+      referenceIndex[dim] = currentIndex[dim] - 1;
+      SizeValueType refLinearIndex = this->nDIndexToLinearIndex( referenceIndex );
+
+      TransformPointer t = TransformType::New();
+      t->SetOffset( -m_CurrentAdjustments[linIndex]->GetOffset() ); // deep copy
+      t->Compose( m_TransformCandidates[i][0] );
+      // t should have no translation now
+
+      auto spacing = this->GetImage( currentIndex, true )->GetSpacing();
+      typename TransformType::OutputVectorType offset = t->GetOffset();
+      TCoordinate dist = 0.0;
+      for ( unsigned d = 0; d < ImageDimension; d++ )
+        {
+        TCoordinate diff = offset[d] / spacing[d];
+        dist += diff * diff;
+        }
+      dist = std::sqrt( dist / ImageDimension ); // Euclidean distance
+      cost[i] = dist;
+      std::cout << " " << i << ": " << dist;
+      }      
+    }
+  std::cout << std::endl;
+  return cost;
+}
+
+template< typename TImageType, typename TCoordinate >
 void
 TileMontage< TImageType, TCoordinate >
 ::OptimizeTiles()
@@ -531,10 +571,10 @@ TileMontage< TImageType, TCoordinate >
   while ( outlierExists )
     {
     unsigned iteration = 0;
-    double rmse = 0.0; // root mean squared error
+    TCoordinate rmse = 0.0; // root mean squared error
     while ( iteration < maxIter && rmse > 0.1 )
       {
-      double sse = 0.0; // sum of squared errors
+      TCoordinate sse = 0.0; // sum of squared errors
      
       // alternate direction of passing through the tiles
       // otherwise bottom or right tile tends to creep away from the center
@@ -562,6 +602,8 @@ TileMontage< TImageType, TCoordinate >
       m_CurrentAdjustments.swap( newAdjustments ); // current=new but without deallocation
       }
 
+    std::vector< TCoordinate > cost = calculateCosts();
+
     // formulate global optimization as an overdetermined linear system
     SizeValueType mullAll = 1; // multiplication of sizes along all dimensions
     for ( unsigned d = 0; d < ImageDimension; d++ )
@@ -579,8 +621,6 @@ TileMontage< TImageType, TCoordinate >
     Eigen::Matrix< TCoordinate, Eigen::Dynamic, ImageDimension > translations( nReg + 1, ImageDimension );
     SizeValueType regIndex = 0; // so we start equations from index 1
     // calculate cost of each registration pair and detect outliers
-    std::vector< double > cost( m_LinearMontageSize * ImageDimension, 0.0 );
-    std::cout << "\nCosts:";
     for ( SizeValueType i = 0; i < m_LinearMontageSize * ImageDimension; i++ )
       {
       if ( !m_TransformCandidates[i].empty() && m_TransformCandidates[i][0] != nullptr )
@@ -600,24 +640,6 @@ TileMontage< TImageType, TCoordinate >
           translations( regIndex, d ) = candidateOffset[d]; // sign might need to be inverted
           }
         ++regIndex;
-
-        TransformPointer t = TransformType::New();
-        t->SetOffset( -m_CurrentAdjustments[linIndex]->GetOffset() ); // deep copy
-        t->Compose( m_TransformCandidates[i][0] );
-        //t->Compose( m_CurrentAdjustments[refLinearIndex] );
-        // t should have no translation now
-
-        auto spacing = this->GetImage( currentIndex, true )->GetSpacing();
-        typename TransformType::OutputVectorType offset = t->GetOffset();
-        double dist = 0.0;
-        for ( unsigned d = 0; d < ImageDimension; d++ )
-          {
-          double diff = offset[d] / spacing[d];
-          dist += diff * diff;
-          }
-        dist = std::sqrt( dist / ImageDimension ); // Euclidean distance
-        cost[i] = dist;
-        std::cout << " " << i << ": " << dist;
         }      
       }
     std::cout << std::endl;

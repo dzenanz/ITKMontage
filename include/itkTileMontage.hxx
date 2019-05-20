@@ -574,10 +574,10 @@ TileMontage< TImageType, TCoordinate >
       nReg += ( mullAll / m_MontageSize[d] ) * ( m_MontageSize[d] - 1 );
       }
 
-    Eigen::SparseMatrix< TCoordinate, Eigen::RowMajor > regCoef( nReg, m_LinearMontageSize );
-    regCoef.reserve( Eigen::VectorXi::Constant( nReg, 2 ) ); // 2 non-zeroes per row
-    Eigen::Matrix< TCoordinate, Eigen::Dynamic, ImageDimension > translations( nReg, ImageDimension );
-    SizeValueType regIndex = 0;
+    Eigen::SparseMatrix< TCoordinate, Eigen::RowMajor > regCoef( nReg + 1, m_LinearMontageSize );
+    regCoef.reserve( Eigen::VectorXi::Constant( nReg + 1, 2 ) ); // 2 non-zeroes per row
+    Eigen::Matrix< TCoordinate, Eigen::Dynamic, ImageDimension > translations( nReg + 1, ImageDimension );
+    SizeValueType regIndex = 0; // so we start equations from index 1
     // calculate cost of each registration pair and detect outliers
     std::vector< double > cost( m_LinearMontageSize * ImageDimension, 0.0 );
     std::cout << "\nCosts:";
@@ -595,7 +595,6 @@ TileMontage< TImageType, TCoordinate >
         regCoef.insert( regIndex, linIndex ) = 1;
         regCoef.insert( regIndex, refLinearIndex ) = -1;
         typename TransformType::OutputVectorType candidateOffset = m_TransformCandidates[i][0]->GetOffset();
-        translations( regIndex ) = m_TransformCandidates[i][0]->GetOffset()[0]; // solve for x
         for ( unsigned d = 0; d < ImageDimension; d++ )
           {
           translations( regIndex, d ) = candidateOffset[d]; // sign might need to be inverted
@@ -623,14 +622,33 @@ TileMontage< TImageType, TCoordinate >
       }
     std::cout << std::endl;
 
-    std::cout << regCoef << std::endl;
+    regCoef.insert( regIndex, 0 ) = 1; // tile 0,0...0
+    for ( unsigned d = 0; d < ImageDimension; d++ )
+      {
+        translations( regIndex, d ) = 0; // should have position 0,0...0
+      }
+
+    std::cout << "regCoef:\n" << regCoef;
+    std::cout << "translations:\n" << translations;
 
     regCoef.makeCompressed();
     Eigen::LeastSquaresConjugateGradient< Eigen::SparseMatrix< TCoordinate > > solver;
     solver.compute( regCoef );
-    Eigen::MatrixXf solutions( m_LinearMontageSize, ImageDimension );
-    solutions = solver.solve( regCoef );
+    Eigen::Matrix< TCoordinate, Eigen::Dynamic, ImageDimension > solutions( m_LinearMontageSize, ImageDimension );
+    solutions = solver.solve( translations );
 
+    std::cout << "\nsolutions:\n" << solutions;
+    std::cout << std::endl << "c|s:" << std::endl;
+    for ( SizeValueType i = 0; i < m_LinearMontageSize; i++ )
+      {
+      typename TransformType::OutputVectorType cOffset = m_CurrentAdjustments[i]->GetOffset();
+      for ( unsigned d = 0; d < ImageDimension; d++ )
+        {
+        std::cout << " " << cOffset[d] << '|' << solutions( i, d );
+        }
+      std::cout << std::endl;
+      }
+    std::cout << std::endl;
 
     outlierExists = false;
     }

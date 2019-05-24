@@ -472,7 +472,8 @@ TileMontage< TImageType, TCoordinate >
     nReg += ( mullAll / m_MontageSize[d] ) * ( m_MontageSize[d] - 1 );
     }
 
-  Eigen::SparseMatrix< TCoordinate, Eigen::RowMajor > regCoef( nReg + 1, m_LinearMontageSize );
+  using SparseMatrix = Eigen::SparseMatrix< TCoordinate, Eigen::RowMajor >;
+  SparseMatrix regCoef( nReg + 1, m_LinearMontageSize );
   regCoef.reserve( Eigen::VectorXi::Constant( nReg + 1, 2 ) ); // 2 non-zeroes per row
   Eigen::Matrix< TCoordinate, Eigen::Dynamic, ImageDimension > translations( nReg + 1, ImageDimension );
   SizeValueType regIndex = 0;
@@ -495,7 +496,7 @@ TileMontage< TImageType, TCoordinate >
         translations( regIndex, d ) = candidateOffset[d];
         }
       ++regIndex;
-      }      
+      }
     }
   std::cout << std::endl;
 
@@ -511,7 +512,7 @@ TileMontage< TImageType, TCoordinate >
   while ( outlierExists )
     {
     regCoef.makeCompressed();
-    Eigen::LeastSquaresConjugateGradient< Eigen::SparseMatrix< TCoordinate > > solver;
+    Eigen::LeastSquaresConjugateGradient< SparseMatrix > solver;
     solver.compute( regCoef );
     Eigen::Matrix< TCoordinate, Eigen::Dynamic, ImageDimension > solutions( m_LinearMontageSize, ImageDimension );
     Eigen::Matrix< TCoordinate, Eigen::Dynamic, ImageDimension > residuals( m_LinearMontageSize, ImageDimension );
@@ -561,7 +562,20 @@ TileMontage< TImageType, TCoordinate >
       }
     else // eliminate the problematic registraition
       {
+      // TODO: get a new equation from m_TransformCandidates[i][0]
 
+      // eliminate this equation by making a duplicate of tile0->0 boundary condition
+      // this preserves indexing order
+      SparseMatrix::InnerIterator it( regCoef, maxIndex );
+      regCoef.coeffRef( maxIndex, it.index() ) = 0;
+      ++it;
+      regCoef.coeffRef( maxIndex, it.index() ) = 0;
+
+      regCoef.coeffRef( maxIndex, 0 ) = 1; // tile 0,0...0
+      for ( unsigned d = 0; d < ImageDimension; d++ )
+        {
+        translations( maxIndex, d ) = 0; // should have position 0,0...0
+        }
       }
     }
 }

@@ -239,9 +239,6 @@ protected:
   TransformPointer OffsetToTransform( const typename PCMOptimizerType::OffsetType& translation,
                                       typename ImageType::Pointer tileInformation );
 
-  /** Returns sum of squared errors. */
-  TransformPointer OptimizeTile( DataObjectPointerArraySizeType linearIndex, double& sse, bool onlyTopLeft );
-
   void OptimizeTiles();
 
 private:

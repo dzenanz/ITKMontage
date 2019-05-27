@@ -476,6 +476,7 @@ TileMontage< TImageType, TCoordinate >
   SparseMatrix regCoef( nReg + 1, m_LinearMontageSize );
   regCoef.reserve( Eigen::VectorXi::Constant( nReg + 1, 2 ) ); // 2 non-zeroes per row
   Eigen::Matrix< TCoordinate, Eigen::Dynamic, ImageDimension > translations( nReg + 1, ImageDimension );
+  std::vector< SizeValueType > equationToCandidate( nReg );
   SizeValueType regIndex = 0;
   for ( SizeValueType i = 0; i < m_LinearMontageSize * ImageDimension; i++ )
     {
@@ -495,6 +496,7 @@ TileMontage< TImageType, TCoordinate >
         {
         translations( regIndex, d ) = candidateOffset[d];
         }
+      equationToCandidate[regIndex] = i;
       ++regIndex;
       }
     }
@@ -556,25 +558,38 @@ TileMontage< TImageType, TCoordinate >
       }
     std::cout << std::endl;
     maxCost = std::sqrt( maxCost ); // MSE -> RMSE
-    if ( maxCost < 0.1 )
+    if ( maxCost < 1.0 )
       {
       outlierExists = false;
       }
     else // eliminate the problematic registraition
       {
-      // TODO: get a new equation from m_TransformCandidates[i][0]
-
-      // eliminate this equation by making a duplicate of tile0->0 boundary condition
-      // this preserves indexing order
-      SparseMatrix::InnerIterator it( regCoef, maxIndex );
-      regCoef.coeffRef( maxIndex, it.index() ) = 0;
-      ++it;
-      regCoef.coeffRef( maxIndex, it.index() ) = 0;
-
-      regCoef.coeffRef( maxIndex, 0 ) = 1; // tile 0,0...0
-      for ( unsigned d = 0; d < ImageDimension; d++ )
+      SizeValueType candidateIndex = equationToCandidate[maxIndex];
+      m_TransformCandidates[candidateIndex].erase( m_TransformCandidates[candidateIndex].begin() );
+      if ( !m_TransformCandidates[maxIndex].empty() )
         {
-        translations( maxIndex, d ) = 0; // should have position 0,0...0
+        // get a new equation from m_TransformCandidates
+        typename TransformType::OutputVectorType candidateOffset =
+          m_TransformCandidates[candidateIndex][0]->GetOffset();
+        for ( unsigned d = 0; d < ImageDimension; d++ )
+          {
+          translations( maxIndex, d ) = candidateOffset[d];
+          }
+        }
+      else
+        {
+        // eliminate this equation by duplicating tile0->0 boundary condition
+        // (this preserves indexing order)
+        SparseMatrix::InnerIterator it( regCoef, maxIndex );
+        regCoef.coeffRef( maxIndex, it.index() ) = 0;
+        ++it;
+        regCoef.coeffRef( maxIndex, it.index() ) = 0;
+
+        regCoef.coeffRef( maxIndex, 0 ) = 1; // tile 0,0...0
+        for ( unsigned d = 0; d < ImageDimension; d++ )
+          {
+          translations( maxIndex, d ) = 0; // should have position 0,0...0
+          }
         }
       }
     }

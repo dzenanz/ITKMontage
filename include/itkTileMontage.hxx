@@ -558,6 +558,14 @@ TileMontage< TImageType, TCoordinate >
         outlierScore( i, d ) = std::abs( trOverDev );
         outlierScore2[i] += trOverDev * trOverDev;
         }
+      if ( outlierScore2[i] > 9.0 ) // more than 3 standard deviations
+        {
+        outlierScore2[i] = std::sqrt( outlierScore2[i] );
+        }
+      else
+        {
+        outlierScore2[i] = 0.0; // not an outlier
+        }
       }
     std::cout << "\noutlierScore:\n" << outlierScore;
 

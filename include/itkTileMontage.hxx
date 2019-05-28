@@ -545,18 +545,18 @@ TileMontage< TImageType, TCoordinate >
       std::cout << std::endl;
       }
 
-    TranslationsMatrix stdDev0 = ( solutions.cwiseAbs2().colwise().sum() / m_LinearMontageSize ).cwiseSqrt(); // assume zero mean
+    TranslationsMatrix stdDev0 = ( translations.cwiseAbs2().colwise().sum() / nReg ).cwiseSqrt(); // assume zero mean
     std::cout << "\nstdDev0:\n" << stdDev0;
 
-    TranslationsMatrix outlierScore( m_LinearMontageSize, ImageDimension );
-    std::vector< TCoordinate > outlierScore2( m_LinearMontageSize, 0.0 ); // sum of squares
-    for ( SizeValueType i = 0; i < m_LinearMontageSize; i++ )
+    TranslationsMatrix outlierScore( nReg, ImageDimension );
+    std::vector< TCoordinate > outlierScore2( nReg, 0.0 ); // sum of squares
+    for ( SizeValueType i = 0; i < nReg; i++ )
       {
       for ( unsigned d = 0; d < ImageDimension; d++ )
         {
-        TCoordinate solOverDev = solutions( i, d ) / stdDev0( d );
-        outlierScore( i, d ) = std::abs( solOverDev );
-        outlierScore2[i] += solOverDev * solOverDev;
+        TCoordinate trOverDev = translations( i, d ) / stdDev0( d );
+        outlierScore( i, d ) = std::abs( trOverDev );
+        outlierScore2[i] += trOverDev * trOverDev;
         }
       }
     std::cout << "\noutlierScore:\n" << outlierScore;
@@ -573,16 +573,8 @@ TileMontage< TImageType, TCoordinate >
         std::cout << ' ' << std::setw( 8 ) << residuals( i, d );
         r2 += residuals( i, d ) * residuals( i, d );
         }
-      SizeValueType candidateIndex = equationToCandidate[i];
-      SizeValueType linIndex = candidateIndex % m_LinearMontageSize;
-      unsigned dim = candidateIndex / m_LinearMontageSize;
-      TileIndexType currentIndex = this->LinearIndexTonDIndex( linIndex );
-      TileIndexType referenceIndex = currentIndex;
-      referenceIndex[dim] = currentIndex[dim] - 1;
-      SizeValueType refLinearIndex = this->nDIndexToLinearIndex( referenceIndex );
-      TCoordinate oScore = outlierScore2[linIndex] + outlierScore2[refLinearIndex];
-      std::cout << " :" << std::setw( 6 ) << oScore;
-      TCoordinate cost = r2 * ( 0.1 + oScore );
+      std::cout << " :" << std::setw( 6 ) << outlierScore2[i];
+      TCoordinate cost = r2 + r2 * outlierScore2[i] + outlierScore2[i];
       std::cout << " =" << std::setw( 8 ) << cost;
       std::cout << std::endl;
       if ( cost > maxCost )

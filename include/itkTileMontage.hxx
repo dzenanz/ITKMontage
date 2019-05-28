@@ -539,7 +539,7 @@ TileMontage< TImageType, TCoordinate >
         cOffset[d] = solutions( i, d );
         // convert solutions and residuals into pixel coordinates
         solutions( i, d ) /= spacing[d];
-        residuals( i, d ) /= spacing[d];        
+        residuals( i, d ) /= spacing[d];
         }
       m_CurrentAdjustments[i]->SetOffset( cOffset );
       std::cout << std::endl;

@@ -476,7 +476,8 @@ TileMontage< TImageType, TCoordinate >
   using SparseMatrix = Eigen::SparseMatrix< TCoordinate, Eigen::RowMajor >;
   SparseMatrix regCoef( nReg + 1, m_LinearMontageSize );
   regCoef.reserve( Eigen::VectorXi::Constant( nReg + 1, 2 ) ); // 2 non-zeroes per row
-  Eigen::Matrix< TCoordinate, Eigen::Dynamic, ImageDimension > translations( nReg + 1, ImageDimension );
+  using TranslationsMatrix = Eigen::Matrix< TCoordinate, Eigen::Dynamic, ImageDimension >;
+  TranslationsMatrix translations( nReg + 1, ImageDimension );
   std::vector< SizeValueType > equationToCandidate( nReg );
   SizeValueType regIndex = 0;
   for ( SizeValueType i = 0; i < m_LinearMontageSize * ImageDimension; i++ )
@@ -517,8 +518,8 @@ TileMontage< TImageType, TCoordinate >
     {
     regCoef.makeCompressed();
     solver.compute( regCoef );
-    Eigen::Matrix< TCoordinate, Eigen::Dynamic, ImageDimension > solutions( m_LinearMontageSize, ImageDimension );
-    Eigen::Matrix< TCoordinate, Eigen::Dynamic, ImageDimension > residuals( m_LinearMontageSize, ImageDimension );
+    TranslationsMatrix solutions( m_LinearMontageSize, ImageDimension );
+    TranslationsMatrix residuals( m_LinearMontageSize, ImageDimension );
     solutions = solver.solve( translations );
     residuals = regCoef * solutions - translations;
 
@@ -538,6 +539,36 @@ TileMontage< TImageType, TCoordinate >
       m_CurrentAdjustments[i]->SetOffset( cOffset );
       std::cout << std::endl;
       }
+
+    TranslationsMatrix means = solutions.colwise().mean();
+    std::cout << "\nmeans:\n" << means;
+    TranslationsMatrix squares( m_LinearMontageSize, ImageDimension );
+    for ( SizeValueType i = 0; i < m_LinearMontageSize; i++ )
+      {
+      squares.row( i ) = ( solutions.row( i ) - means ).cwiseAbs2();
+      }
+    std::cout << "\nsquares:\n" << squares;
+    TranslationsMatrix sqSum = squares.colwise().sum();
+    std::cout << "\nsqSum:\n" << sqSum;
+    TranslationsMatrix sqSumN = sqSum / m_LinearMontageSize;
+    std::cout << "\nsqSumN:\n" << sqSumN;
+    TranslationsMatrix stdDev = sqSumN.cwiseSqrt();
+    std::cout << "\nstdDev:\n" << stdDev;
+    TranslationsMatrix stdDev2 = ( solutions.cwiseAbs2().colwise().sum() / m_LinearMontageSize ).cwiseSqrt(); // assume zero mean
+    std::cout << "\nstdDev2:\n" << stdDev2;
+
+    TranslationsMatrix outlierScore( m_LinearMontageSize, ImageDimension );
+    TranslationsMatrix outlierScore2( m_LinearMontageSize, ImageDimension );
+    for ( SizeValueType i = 0; i < m_LinearMontageSize; i++ )
+      {
+      for ( unsigned d = 0; d < ImageDimension; d++ )
+        {
+        outlierScore( i, d ) = ( solutions( i, d ) - means( d ) ) / stdDev( d );
+        outlierScore2( i, d ) = solutions( i, d ) / stdDev2( d );
+        }
+      }
+    std::cout << "\noutlierScore:\n" << outlierScore;
+    std::cout << "\noutlierScore2:\n" << outlierScore2;
 
     TCoordinate maxCost = 0;
     SizeValueType maxIndex;

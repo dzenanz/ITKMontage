@@ -563,7 +563,8 @@ TileMontage< TImageType, TCoordinate >
       for ( unsigned d = 0; d < ImageDimension; d++ )
         {
         std::cout << ' ' << std::setw( 8 ) << residuals( i, d );
-        cost += residuals( i, d ) * residuals( i, d );
+        TCoordinate r2 = residuals( i, d ) * residuals( i, d ); // square of per dimension cost
+        cost += r2 * ( outlierScore( i, d ) + 1 );
         }
       std::cout << std::endl;
       if ( cost > maxCost )

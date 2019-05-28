@@ -29,6 +29,7 @@
 
 #include <algorithm>
 #include <cassert>
+#include <iomanip>
 
 namespace itk
 {
@@ -508,13 +509,13 @@ TileMontage< TImageType, TCoordinate >
     translations( regIndex, d ) = 0; // should have position 0,0...0
     }
 
+  Eigen::LeastSquaresConjugateGradient< SparseMatrix > solver;
   const unsigned maxIter = 10 + std::pow( m_LinearMontageSize, 1.0 / ImageDimension );
   bool outlierExists = true;
   unsigned iteration = 0;
   while ( outlierExists )
     {
     regCoef.makeCompressed();
-    Eigen::LeastSquaresConjugateGradient< SparseMatrix > solver;
     solver.compute( regCoef );
     Eigen::Matrix< TCoordinate, Eigen::Dynamic, ImageDimension > solutions( m_LinearMontageSize, ImageDimension );
     Eigen::Matrix< TCoordinate, Eigen::Dynamic, ImageDimension > residuals( m_LinearMontageSize, ImageDimension );
@@ -524,13 +525,14 @@ TileMontage< TImageType, TCoordinate >
     std::cout << "regCoef:\n" << regCoef;
     std::cout << "translations:\n" << translations;
     std::cout << "\nsolutions:\n" << solutions;
-    std::cout << std::endl << "c|s:" << std::endl;
+    std::cout << std::endl << "current|solution:" << std::endl;
     for ( SizeValueType i = 0; i < m_LinearMontageSize; i++ )
       {
       typename TransformType::OutputVectorType cOffset = m_CurrentAdjustments[i]->GetOffset();
       for ( unsigned d = 0; d < ImageDimension; d++ )
         {
-        std::cout << " " << cOffset[d] << '|' << solutions( i, d );
+        std::cout << std::fixed << std::setprecision(2);
+        std::cout << " " << std::setw( 8 ) << cOffset[d] << '|' << std::setw( 8 ) << solutions( i, d );
         cOffset[d] = solutions( i, d );
         }
       m_CurrentAdjustments[i]->SetOffset( cOffset );
@@ -546,7 +548,7 @@ TileMontage< TImageType, TCoordinate >
       std::cout << 'R' << i << ':';
       for ( unsigned d = 0; d < ImageDimension; d++ )
         {
-        std::cout << ' ' << residuals( i, d );
+        std::cout << ' ' << std::setw( 8 ) << residuals( i, d );
         cost += residuals( i, d ) * residuals( i, d );
         }
       std::cout << std::endl;
@@ -565,8 +567,18 @@ TileMontage< TImageType, TCoordinate >
     else // eliminate the problematic registraition
       {
       SizeValueType candidateIndex = equationToCandidate[maxIndex];
-      m_TransformCandidates[candidateIndex].erase( m_TransformCandidates[candidateIndex].begin() );
-      if ( !m_TransformCandidates[maxIndex].empty() )
+      std::cout << "\nOutlier detected. Registration index " << candidateIndex << ", T: ";
+      if ( !m_TransformCandidates[candidateIndex].empty() )
+        {
+        std::cout << m_TransformCandidates[candidateIndex][0]->GetOffset();
+        m_TransformCandidates[candidateIndex].erase( m_TransformCandidates[candidateIndex].begin() );
+        }
+      else
+        {
+        std::cout << "zeroes";
+        }
+
+      if ( !m_TransformCandidates[candidateIndex].empty() )
         {
         // get a new equation from m_TransformCandidates
         typename TransformType::OutputVectorType candidateOffset =
@@ -575,21 +587,21 @@ TileMontage< TImageType, TCoordinate >
           {
           translations( maxIndex, d ) = candidateOffset[d];
           }
+        std::cout << "  Replaced by T: " << candidateOffset << std::endl;
         }
       else
         {
-        // eliminate this equation by duplicating tile0->0 boundary condition
-        // (this preserves indexing order)
+        // reduce the weight of this equation and assume 0 translation
         SparseMatrix::InnerIterator it( regCoef, maxIndex );
-        regCoef.coeffRef( maxIndex, it.index() ) = 0;
+        regCoef.coeffRef( maxIndex, it.index() ) *= 0.01;
         ++it;
-        regCoef.coeffRef( maxIndex, it.index() ) = 0;
+        regCoef.coeffRef( maxIndex, it.index() ) *= 0.01;
 
-        regCoef.coeffRef( maxIndex, 0 ) = 1; // tile 0,0...0
         for ( unsigned d = 0; d < ImageDimension; d++ )
           {
-          translations( maxIndex, d ) = 0; // should have position 0,0...0
+          translations( maxIndex, d ) = 0;
           }
+        std::cout << "  Replaced by zeroes." << std::endl;
         }
       }
     }

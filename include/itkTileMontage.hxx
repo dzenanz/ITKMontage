@@ -540,35 +540,18 @@ TileMontage< TImageType, TCoordinate >
       std::cout << std::endl;
       }
 
-    TranslationsMatrix means = solutions.colwise().mean();
-    std::cout << "\nmeans:\n" << means;
-    TranslationsMatrix squares( m_LinearMontageSize, ImageDimension );
-    for ( SizeValueType i = 0; i < m_LinearMontageSize; i++ )
-      {
-      squares.row( i ) = ( solutions.row( i ) - means ).cwiseAbs2();
-      }
-    std::cout << "\nsquares:\n" << squares;
-    TranslationsMatrix sqSum = squares.colwise().sum();
-    std::cout << "\nsqSum:\n" << sqSum;
-    TranslationsMatrix sqSumN = sqSum / m_LinearMontageSize;
-    std::cout << "\nsqSumN:\n" << sqSumN;
-    TranslationsMatrix stdDev = sqSumN.cwiseSqrt();
-    std::cout << "\nstdDev:\n" << stdDev;
-    TranslationsMatrix stdDev2 = ( solutions.cwiseAbs2().colwise().sum() / m_LinearMontageSize ).cwiseSqrt(); // assume zero mean
-    std::cout << "\nstdDev2:\n" << stdDev2;
+    TranslationsMatrix stdDev0 = ( solutions.cwiseAbs2().colwise().sum() / m_LinearMontageSize ).cwiseSqrt(); // assume zero mean
+    std::cout << "\nstdDev0:\n" << stdDev0;
 
     TranslationsMatrix outlierScore( m_LinearMontageSize, ImageDimension );
-    TranslationsMatrix outlierScore2( m_LinearMontageSize, ImageDimension );
     for ( SizeValueType i = 0; i < m_LinearMontageSize; i++ )
       {
       for ( unsigned d = 0; d < ImageDimension; d++ )
         {
-        outlierScore( i, d ) = ( solutions( i, d ) - means( d ) ) / stdDev( d );
-        outlierScore2( i, d ) = solutions( i, d ) / stdDev2( d );
+        outlierScore( i, d ) = std::abs( solutions( i, d ) ) / stdDev0( d );
         }
       }
     std::cout << "\noutlierScore:\n" << outlierScore;
-    std::cout << "\noutlierScore2:\n" << outlierScore2;
 
     TCoordinate maxCost = 0;
     SizeValueType maxIndex;

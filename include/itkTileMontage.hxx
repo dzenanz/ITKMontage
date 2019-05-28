@@ -581,7 +581,7 @@ TileMontage< TImageType, TCoordinate >
       SizeValueType refLinearIndex = this->nDIndexToLinearIndex( referenceIndex );
       TCoordinate oScore = outlierScore2[linIndex] + outlierScore2[refLinearIndex];
       std::cout << " :" << std::setw( 6 ) << oScore;
-      TCoordinate cost = r2 * ( 0.1 + oScore );
+      TCoordinate cost = r2 + r2 * oScore + oScore;
       std::cout << " =" << std::setw( 8 ) << cost;
       std::cout << std::endl;
       if ( cost > maxCost )

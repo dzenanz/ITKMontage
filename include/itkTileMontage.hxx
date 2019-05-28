@@ -510,6 +510,7 @@ TileMontage< TImageType, TCoordinate >
     translations( regIndex, d ) = 0; // should have position 0,0...0
     }
 
+  typename ImageType::SpacingType spacing = this->GetImage( this->LinearIndexTonDIndex( 0 ), true )->GetSpacing();
   Eigen::LeastSquaresConjugateGradient< SparseMatrix > solver;
   const unsigned maxIter = 10 + std::pow( m_LinearMontageSize, 1.0 / ImageDimension );
   bool outlierExists = true;
@@ -535,6 +536,9 @@ TileMontage< TImageType, TCoordinate >
         std::cout << std::fixed << std::setprecision(2);
         std::cout << " " << std::setw( 8 ) << cOffset[d] << '|' << std::setw( 8 ) << solutions( i, d );
         cOffset[d] = solutions( i, d );
+        // convert solutions and residuals into pixel coordinates
+        solutions( i, d ) /= spacing[d];
+        residuals( i, d ) /= spacing[d];        
         }
       m_CurrentAdjustments[i]->SetOffset( cOffset );
       std::cout << std::endl;
@@ -544,11 +548,14 @@ TileMontage< TImageType, TCoordinate >
     std::cout << "\nstdDev0:\n" << stdDev0;
 
     TranslationsMatrix outlierScore( m_LinearMontageSize, ImageDimension );
+    std::vector< TCoordinate > outlierScore2( m_LinearMontageSize, 0.0 ); // sum of squares
     for ( SizeValueType i = 0; i < m_LinearMontageSize; i++ )
       {
       for ( unsigned d = 0; d < ImageDimension; d++ )
         {
-        outlierScore( i, d ) = std::abs( solutions( i, d ) ) / stdDev0( d );
+        TCoordinate solOverDev = solutions( i, d ) / stdDev0( d );
+        outlierScore( i, d ) = std::abs( solOverDev );
+        outlierScore2[i] += solOverDev * solOverDev;
         }
       }
     std::cout << "\noutlierScore:\n" << outlierScore;
@@ -556,16 +563,26 @@ TileMontage< TImageType, TCoordinate >
     TCoordinate maxCost = 0;
     SizeValueType maxIndex;
     std::cout << "\nresiduals:\n";
-    for ( SizeValueType i = 0; i < nReg + 1; i++ )
+    for ( SizeValueType i = 0; i < nReg; i++ )
       {
-      TCoordinate cost = 0;
+      TCoordinate r2 = 0; // sum of squared residuals
       std::cout << 'R' << i << ':';
       for ( unsigned d = 0; d < ImageDimension; d++ )
         {
         std::cout << ' ' << std::setw( 8 ) << residuals( i, d );
-        TCoordinate r2 = residuals( i, d ) * residuals( i, d ); // square of per dimension cost
-        cost += r2 * ( outlierScore( i, d ) + 1 );
+        r2 += residuals( i, d ) * residuals( i, d );
         }
+      SizeValueType candidateIndex = equationToCandidate[i];
+      SizeValueType linIndex = candidateIndex % m_LinearMontageSize;
+      unsigned dim = candidateIndex / m_LinearMontageSize;
+      TileIndexType currentIndex = this->LinearIndexTonDIndex( linIndex );
+      TileIndexType referenceIndex = currentIndex;
+      referenceIndex[dim] = currentIndex[dim] - 1;
+      SizeValueType refLinearIndex = this->nDIndexToLinearIndex( referenceIndex );
+      TCoordinate oScore = outlierScore2[linIndex] + outlierScore2[refLinearIndex];
+      std::cout << " :" << std::setw( 6 ) << oScore;
+      TCoordinate cost = r2 * ( 0.1 + oScore );
+      std::cout << " =" << std::setw( 8 ) << cost;
       std::cout << std::endl;
       if ( cost > maxCost )
         {
@@ -582,7 +599,7 @@ TileMontage< TImageType, TCoordinate >
     else // eliminate the problematic registraition
       {
       SizeValueType candidateIndex = equationToCandidate[maxIndex];
-      std::cout << "\nOutlier detected. Registration index " << candidateIndex << ", T: ";
+      std::cout << "\nOutlier detected. Equation " << maxIndex << ", Registration " << candidateIndex << ", T: ";
       if ( !m_TransformCandidates[candidateIndex].empty() )
         {
         std::cout << m_TransformCandidates[candidateIndex][0]->GetOffset();

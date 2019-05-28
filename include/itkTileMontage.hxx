@@ -473,11 +473,12 @@ TileMontage< TImageType, TCoordinate >
     nReg += ( mullAll / m_MontageSize[d] ) * ( m_MontageSize[d] - 1 );
     }
 
+  constexpr unsigned Dimension = ImageDimension;
   using SparseMatrix = Eigen::SparseMatrix< TCoordinate, Eigen::RowMajor >;
   SparseMatrix regCoef( nReg + 1, m_LinearMontageSize );
   regCoef.reserve( Eigen::VectorXi::Constant( nReg + 1, 2 ) ); // 2 non-zeroes per row
-  using TranslationsMatrix = Eigen::Matrix< TCoordinate, Eigen::Dynamic, ImageDimension >;
-  TranslationsMatrix translations( nReg + 1, ImageDimension );
+  using TranslationsMatrix = Eigen::Matrix< TCoordinate, Eigen::Dynamic, Dimension >;
+  TranslationsMatrix translations( nReg + 1, Dimension );
   std::vector< SizeValueType > equationToCandidate( nReg );
   SizeValueType regIndex = 0;
   for ( SizeValueType i = 0; i < m_LinearMontageSize * ImageDimension; i++ )
@@ -520,8 +521,8 @@ TileMontage< TImageType, TCoordinate >
     std::cout << "\n\nIteration " << ++iteration << std::endl;
     regCoef.makeCompressed();
     solver.compute( regCoef );
-    TranslationsMatrix solutions( m_LinearMontageSize, ImageDimension );
-    TranslationsMatrix residuals( m_LinearMontageSize, ImageDimension );
+    TranslationsMatrix solutions( m_LinearMontageSize, Dimension );
+    TranslationsMatrix residuals( m_LinearMontageSize, Dimension );
     solutions = solver.solve( translations );
     residuals = regCoef * solutions - translations;
 
@@ -548,7 +549,7 @@ TileMontage< TImageType, TCoordinate >
     TranslationsMatrix stdDev0 = ( translations.cwiseAbs2().colwise().sum() / nReg ).cwiseSqrt(); // assume zero mean
     std::cout << "\nstdDev0:\n" << stdDev0;
 
-    TranslationsMatrix outlierScore( nReg, ImageDimension );
+    TranslationsMatrix outlierScore( nReg, Dimension );
     std::vector< TCoordinate > outlierScore2( nReg, 0.0 ); // sum of squares
     for ( SizeValueType i = 0; i < nReg; i++ )
       {
@@ -626,7 +627,7 @@ TileMontage< TImageType, TCoordinate >
       else
         {
         // nudge both endpoints of this registration towards zero adjustment
-        SparseMatrix::InnerIterator it( regCoef, maxIndex );
+        typename SparseMatrix::InnerIterator it( regCoef, maxIndex );
         regCoef.coeffRef( maxIndex, it.index() ) = 0.01 * std::abs( regCoef.coeffRef( maxIndex, it.index() ) );
         ++it;
         regCoef.coeffRef( maxIndex, it.index() ) = 0.01 * std::abs( regCoef.coeffRef( maxIndex, it.index() ) );

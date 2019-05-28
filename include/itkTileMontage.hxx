@@ -623,11 +623,11 @@ TileMontage< TImageType, TCoordinate >
         }
       else
         {
-        // reduce the weight of this equation and assume 0 translation
+        // nudge both endpoints of this registration towards zero adjustment
         SparseMatrix::InnerIterator it( regCoef, maxIndex );
-        regCoef.coeffRef( maxIndex, it.index() ) *= 0.01;
+        regCoef.coeffRef( maxIndex, it.index() ) = 0.01 * std::abs( regCoef.coeffRef( maxIndex, it.index() ) );
         ++it;
-        regCoef.coeffRef( maxIndex, it.index() ) *= 0.01;
+        regCoef.coeffRef( maxIndex, it.index() ) = 0.01 * std::abs( regCoef.coeffRef( maxIndex, it.index() ) );
 
         for ( unsigned d = 0; d < ImageDimension; d++ )
           {

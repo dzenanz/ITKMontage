@@ -491,8 +491,8 @@ TileMontage< TImageType, TCoordinate >
       referenceIndex[dim] = currentIndex[dim] - 1;
       SizeValueType refLinearIndex = this->nDIndexToLinearIndex( referenceIndex );
 
-      regCoef.insert( regIndex, linIndex ) = 1;
       regCoef.insert( regIndex, refLinearIndex ) = -1;
+      regCoef.insert( regIndex, linIndex ) = 1;
       typename TransformType::OutputVectorType candidateOffset = m_TransformCandidates[i][0]->GetOffset();
       for ( unsigned d = 0; d < ImageDimension; d++ )
         {
@@ -517,6 +517,7 @@ TileMontage< TImageType, TCoordinate >
   unsigned iteration = 0;
   while ( outlierExists )
     {
+    std::cout << "\n\nIteration " << ++iteration << std::endl;
     regCoef.makeCompressed();
     solver.compute( regCoef );
     TranslationsMatrix solutions( m_LinearMontageSize, ImageDimension );
@@ -566,7 +567,7 @@ TileMontage< TImageType, TCoordinate >
     for ( SizeValueType i = 0; i < nReg; i++ )
       {
       TCoordinate r2 = 0; // sum of squared residuals
-      std::cout << 'R' << i << ':';
+      std::cout << 'E' << i << ':';
       for ( unsigned d = 0; d < ImageDimension; d++ )
         {
         std::cout << ' ' << std::setw( 8 ) << residuals( i, d );
@@ -581,7 +582,7 @@ TileMontage< TImageType, TCoordinate >
       SizeValueType refLinearIndex = this->nDIndexToLinearIndex( referenceIndex );
       TCoordinate oScore = outlierScore2[linIndex] + outlierScore2[refLinearIndex];
       std::cout << " :" << std::setw( 6 ) << oScore;
-      TCoordinate cost = r2 + r2 * oScore + oScore;
+      TCoordinate cost = r2 * ( 0.1 + oScore );
       std::cout << " =" << std::setw( 8 ) << cost;
       std::cout << std::endl;
       if ( cost > maxCost )
@@ -592,11 +593,12 @@ TileMontage< TImageType, TCoordinate >
       }
     std::cout << std::endl;
     maxCost = std::sqrt( maxCost ); // MSE -> RMSE
+
     if ( maxCost < 1.0 )
       {
       outlierExists = false;
       }
-    else // eliminate the problematic registraition
+    else // eliminate the problematic equation
       {
       SizeValueType candidateIndex = equationToCandidate[maxIndex];
       std::cout << "\nOutlier detected. Equation " << maxIndex << ", Registration " << candidateIndex << ", T: ";

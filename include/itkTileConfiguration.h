@@ -57,6 +57,10 @@ struct ITK_TEMPLATE_EXPORT TileConfiguration
 
   static double_conversion::DoubleToStringConverter doubleConverter;
 
+  // tries parsing the file, return first file name and set dimension
+  static std::string &
+  TryParse(const std::string & pathToFile, unsigned & dimension);
+
   size_t
   LinearSize() const
   {

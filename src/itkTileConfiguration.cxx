@@ -176,93 +176,25 @@ ParseTileConfiguration2D(const std::string pathToFile)
 void
 WriteTileConfiguration2D(const std::string pathToFile, const TileLayout2D & tileConfiguration2D)
 {
-  std::ofstream tileFile(pathToFile);
-  if (!tileFile)
+  TileConfiguration<2> tc;
+  tc.AxisSizes[1] = tileConfiguration2D.size();
+  if (tc.AxisSizes[1] > 0)
   {
-    throw std::runtime_error("Could not open for writing: " + pathToFile);
+    tc.AxisSizes[0] = tileConfiguration2D[0].size();
   }
-  else
+  tc.Tiles.resize(tc.LinearSize());
+
+  for (unsigned y = 0; y < tileConfiguration2D.size(); y++)
   {
-    tileFile << "# Define the number of dimensions we are working on\ndim = 2\n\n";
-    tileFile << "# Define the image coordinates\n";
-    char                             buffer[20];
-    double_conversion::StringBuilder conversionResult(buffer, 20);
-
-    for (unsigned y = 0; y < tileConfiguration2D.size(); y++)
+    for (unsigned x = 0; x < tileConfiguration2D[y].size(); x++)
     {
-      for (unsigned x = 0; x < tileConfiguration2D[y].size(); x++)
-      {
-        tileFile << tileConfiguration2D[y][x].FileName << ";;(";
-        auto pos = tileConfiguration2D[y][x].Position;
-
-        doubleConverter.ToShortest(pos[0], &conversionResult);
-        tileFile << conversionResult.Finalize();
-        tileFile << ", ";
-        conversionResult.Reset();
-
-        doubleConverter.ToShortest(pos[1], &conversionResult);
-        tileFile << conversionResult.Finalize();
-        tileFile << ")\n";
-        conversionResult.Reset();
-      }
-    }
-
-    if (!tileFile)
-    {
-      throw std::runtime_error("Writing not successful to: " + pathToFile);
+      size_t linearIndex = x + y * tc.AxisSizes[0];
+      tc.Tiles[linearIndex].Position = tileConfiguration2D[y][x].Position;
+      tc.Tiles[linearIndex].FileName = tileConfiguration2D[y][x].FileName;
     }
   }
+
+  tc.Write(pathToFile); // delegate writing to nD templated method
 }
-
-//template <unsigned Dimension>
-//void
-//TileConfiguration<Dimension>::Write(const std::string & pathToFile)
-//{
-//  std::ofstream tileFile(pathToFile);
-//  if (!tileFile)
-//  {
-//    throw std::runtime_error("Could not open for writing: " + pathToFile);
-//  }
-//
-//  tileFile << "# Tile coordinates are in index space, not physical space\n";
-//  tileFile << "dim = " << Dimension << "\n\n";
-//  char                             buffer[20];
-//  double_conversion::StringBuilder conversionResult(buffer, 20);
-//
-//  size_t totalTiles = this->LinearSize();
-//  for (SizeValueType linearIndex = 0; linearIndex < totalTiles; linearIndex++)
-//  {
-//    TileIndexType ind = this->LinearIndexToNDIndex(linearIndex);
-//    tileFile << Tiles[linearIndex].FileName << ";;(";
-//
-//    for (unsigned d = 0; d < Dimension; d++)
-//    {
-//      if (d > 0)
-//      {
-//        tileFile << ", ";
-//      }
-//
-//      doubleConverter.ToShortest(Tiles[linearIndex].Position[d], &conversionResult);
-//      tileFile << conversionResult.Finalize();
-//      conversionResult.Reset();
-//    }
-//    tileFile << ')' << std::endl;
-//  }
-//
-//  if (!tileFile)
-//  {
-//    throw std::runtime_error("Writing not successful to: " + pathToFile);
-//  }
-//}
-//
-//template <unsigned Dimension>
-//TileConfiguration<Dimension>
-//TileConfiguration<Dimension>::Parse(const std::string & pathToFile)
-//{
-//  TileConfiguration<Dimension> tc;
-//
-//  return tc;
-//}
-
 
 } // namespace itk

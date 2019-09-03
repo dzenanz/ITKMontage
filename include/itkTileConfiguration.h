@@ -30,6 +30,10 @@
 // move to .hxx file
 #include "double-conversion/double-conversion.h"
 
+#include <cassert>
+#include <fstream>
+#include <limits>
+#include <sstream>
 
 namespace itk
 {
@@ -55,11 +59,8 @@ struct ITK_TEMPLATE_EXPORT TileConfiguration
 
   std::vector<TileND> Tiles;
 
+  static double_conversion::StringToDoubleConverter stringConverter;
   static double_conversion::DoubleToStringConverter doubleConverter;
-
-  // tries parsing the file, return first file name and set dimension
-  static std::string &
-  TryParse(const std::string & pathToFile, unsigned & dimension);
 
   size_t
   LinearSize() const
@@ -103,7 +104,114 @@ struct ITK_TEMPLATE_EXPORT TileConfiguration
     return ind;
   }
 
-  static TileConfiguration<Dimension>
+  static std::string
+  getNextNonCommentLine(std::istream & in)
+  {
+    std::string temp;
+    while (std::getline(in, temp))
+    {
+      if (temp.empty() || temp[0] == '#')
+      {
+        continue; // this is either an empty line or a comment
+      }
+      if (temp.size() == 1 && temp[0] == '\r')
+      {
+        continue; // empty line ending in CRLF
+      }
+      if (temp[temp.size() - 1] == '\r')
+      {
+        temp.erase(temp.size() - 1, 1);
+      }
+      break; // temp has interesting content
+    }
+    return temp;
+  }
+
+  static Tile<Dimension>
+  parseLine(const std::string line, std::string & timePointID)
+  {
+    itk::Tile<Dimension> tile;
+    std::stringstream    ss(line);
+    std::string          temp;
+
+    std::getline(ss, temp, ';');
+    tile.FileName = temp;
+    std::getline(ss, temp, ';');
+    if (timePointID.empty())
+    {
+      timePointID = temp;
+    }
+    else
+    {
+      itkAssertOrThrowMacro(temp == timePointID,
+                            "Only a single time point is supported. " << timePointID << " != " << temp);
+    }
+    std::getline(ss, temp, '(');
+
+    using PointType = itk::Point<double, Dimension>;
+    PointType p;
+    for (unsigned d = 0; d < Dimension; d++)
+    {
+      std::getline(ss, temp, ',');
+      int processed = 0;
+      p[d] = stringConverter.StringToDouble(temp.c_str(), temp.length(), &processed);
+    }
+    tile.Position = p;
+
+    return tile;
+  }
+
+  static std::vector<itk::Tile<Dimension>>
+  parseRow(std::string & line, std::istream & in, std::string & timePointID)
+  {
+    std::vector<itk::Tile<Dimension>> row;
+
+    std::string          timePoint;
+    itk::Tile<Dimension> tile = parseLine(line, timePoint);
+    row.push_back(tile);
+    line = getNextNonCommentLine(in);
+
+    while (in)
+    {
+      tile = parseLine(line, timePointID);
+      // determine dominant axis change
+      double xDiff = tile.Position[0] - row.back().Position[0];
+      double yDiff = tile.Position[1] - row.back().Position[1];
+      if (yDiff > xDiff) // this is start of a new row
+      {
+        return row;
+      }
+      row.push_back(tile);
+      line = getNextNonCommentLine(in);
+    }
+
+    return row;
+  }
+
+
+  // tries parsing the file, return first file name and set dimension
+  static std::string
+  TryParse(const std::string & pathToFile, unsigned & dimension)
+  {
+    std::ifstream tileFile(pathToFile);
+    if (!tileFile)
+    {
+      throw std::runtime_error("Could not open for reading: " + pathToFile);
+    }
+
+    std::string temp = getNextNonCommentLine(tileFile);
+    if (temp.substr(0, 6) == "dim = ")
+    {
+      dimension = std::stoul(temp.substr(6));
+      temp = TileConfiguration<Dimension>::getNextNonCommentLine(tileFile); // get next line
+    }
+
+    std::string     timePointID;
+    Tile<Dimension> tile = parseLine(temp, timePointID);
+    return tile.FileName;
+  }
+
+  void
   Parse(const std::string & pathToFile)
   {
     TileConfiguration<Dimension> tc;
@@ -151,6 +259,16 @@ struct ITK_TEMPLATE_EXPORT TileConfiguration
     }
   }
 };
+
+template <unsigned Dimension>
+double_conversion::StringToDoubleConverter TileConfiguration<Dimension>::stringConverter(
+  double_conversion::StringToDoubleConverter::ALLOW_TRAILING_JUNK |
+    double_conversion::StringToDoubleConverter::ALLOW_LEADING_SPACES |
+    double_conversion::StringToDoubleConverter::ALLOW_TRAILING_SPACES,
+  0.0,
+  std::numeric_limits<double>::quiet_NaN(),
+  nullptr,
+  nullptr);
 
 template <unsigned Dimension>
 double_conversion::DoubleToStringConverter TileConfiguration<

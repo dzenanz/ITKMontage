@@ -92,6 +92,7 @@ itkMontageTest2D(int argc, char * argv[])
     std::cerr << "Only dimension 2 is supported!" << std::endl;
     return EXIT_FAILURE;
   }
+  tc.Parse(inputPath + "TileConfiguration.txt");
 
   itk::TileLayout2D stageTiles = itk::ParseTileConfiguration2D(inputPath + "TileConfiguration.txt");
   itk::TileLayout2D actualTiles = itk::ParseTileConfiguration2D(inputPath + "TileConfiguration.registered.txt");

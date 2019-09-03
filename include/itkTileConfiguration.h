@@ -218,12 +218,16 @@ struct ITK_TEMPLATE_EXPORT TileConfiguration
     {
       throw std::runtime_error("Could not open for reading: " + pathToFile);
     }
-
-    std::string temp = getNextNonCommentLine(tileFile);
-    if (temp.substr(0, 6) == "dim = ")
+    std::string line = getNextNonCommentLine(tileFile);
+    if (line.substr(0, 6) == "dim = ")
     {
-      dimension = std::stoul(temp.substr(6));
-      temp = TileConfiguration<Dimension>::getNextNonCommentLine(tileFile); // get next line
+      unsigned dim = std::stoul(line.substr(6));
+      if (dim != Dimension)
+      {
+        throw std::runtime_error("Expected dimension " + std::to_string(Dimension) + ", but got " +
+                                 std::to_string(dim) + " from string:\n\n" + line);
+      }
+      line = TileConfiguration<Dimension>::getNextNonCommentLine(tileFile); // get next line
     }
 
     AxisSizes.Fill(1);

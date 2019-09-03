@@ -188,7 +188,6 @@ struct ITK_TEMPLATE_EXPORT TileConfiguration
     return row;
   }
 
-
   // tries parsing the file, return first file name and set dimension
   static std::string
   TryParse(const std::string & pathToFile, unsigned & dimension)
@@ -214,9 +213,75 @@ struct ITK_TEMPLATE_EXPORT TileConfiguration
   void
   Parse(const std::string & pathToFile)
   {
-    TileConfiguration<Dimension> tc;
+    std::ifstream tileFile(pathToFile);
+    if (!tileFile)
+    {
+      throw std::runtime_error("Could not open for reading: " + pathToFile);
+    }
 
-    return tc;
+    std::string temp = getNextNonCommentLine(tileFile);
+    if (temp.substr(0, 6) == "dim = ")
+    {
+      dimension = std::stoul(temp.substr(6));
+      temp = TileConfiguration<Dimension>::getNextNonCommentLine(tileFile); // get next line
+    }
+
+    AxisSizes.Fill(1);
+    Tiles.clear();
+    TileIndexType cInd;
+    unsigned      initializedDimensions = 0; // no dimension has been initialized
+
+    std::string          timePoint;
+    itk::Tile<Dimension> tile = parseLine(line, timePoint);
+    Tiles.push_back(tile);
+    line = getNextNonCommentLine(in);
+
+    while (in)
+    {
+      tile = parseLine(line, timePointID);
+      // determine dominant axis change
+      unsigned maxAxis = 0; // (0=x, 1=y, 2=z etc)
+      double   maxDiff = tile.Position[0] - row.back().Position[0];
+      for (unsigned d = 1; d < Dimension; d++)
+      {
+        double diff = tile.Position[d] - row.back().Position[d];
+        if (diff > maxDiff)
+        {
+          maxDiff = diff;
+          maxAxis = d;
+        }
+      }
+
+      if (maxAxis > initializedDimensions) // we now know the size along this dimension
+      {
+        AxisSizes[maxAxis - 1] = cInd[maxAxis - 1];
+        initializedDimensions = maxAxis;
+      }
+      else // check consistency with previously established size
+      {
+        itkAssertOrThrowMacro(cInd[maxAxis] == AxisSizes[maxAxis] - 1,
+                              "Axis sizes: " << AxisSizes << " current index: " << cInd[maxAxis]
+                                             << ", but we have reached the end along axis " << maxAxis);
+      }
+
+      // update current tile index
+      for (unsigned d = 0; d < maxAxis; d++)
+      {
+        cInd[d] = 0;
+      }
+      ++cInd[maxAxis];
+
+      if (maxAxis < initializedDimensions) // check bounds, if bounds are established
+      {
+        itkAssertOrThrowMacro(cInd[maxAxis] < AxisSizes[maxAxis],
+                              "Axis sizes: " << AxisSizes << ", but we reached index " << cInd[maxAxis]
+                                             << ". Violation along axis" << maxAxis);
+      }
+
+      Tiles.push_back(tile);
+      line = getNextNonCommentLine(in);
+    }
+    AxisSizes[Dimension - 1] = cInd[Dimension - 1];
   }
 
   void

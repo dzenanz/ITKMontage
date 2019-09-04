@@ -161,33 +161,6 @@ struct ITK_TEMPLATE_EXPORT TileConfiguration
     return tile;
   }
 
-  static std::vector<itk::Tile<Dimension>>
-  parseRow(std::string & line, std::istream & in, std::string & timePointID)
-  {
-    std::vector<itk::Tile<Dimension>> row;
-
-    std::string          timePoint;
-    itk::Tile<Dimension> tile = parseLine(line, timePoint);
-    row.push_back(tile);
-    line = getNextNonCommentLine(in);
-
-    while (in)
-    {
-      tile = parseLine(line, timePointID);
-      // determine dominant axis change
-      double xDiff = tile.Position[0] - row.back().Position[0];
-      double yDiff = tile.Position[1] - row.back().Position[1];
-      if (yDiff > xDiff) // this is start of a new row
-      {
-        return row;
-      }
-      row.push_back(tile);
-      line = getNextNonCommentLine(in);
-    }
-
-    return row;
-  }
-
   // tries parsing the file, return first file name and set dimension
   static std::string
   TryParse(const std::string & pathToFile, unsigned & dimension)

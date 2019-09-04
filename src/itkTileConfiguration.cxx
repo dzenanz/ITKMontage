@@ -23,41 +23,18 @@ namespace itk
 TileLayout2D
 ParseTileConfiguration2D(const std::string pathToFile)
 {
-  constexpr unsigned Dimension = 2;
+  TileConfiguration<2> tc;
+  tc.Parse(pathToFile);
 
-  unsigned     xMontageSize = 0;
-  TileLayout2D tiles;
-  std::string  timePointID; // just to make sure all lines specify the same time point
-
-  std::ifstream tileFile(pathToFile);
-  if (!tileFile)
+  TileLayout2D tiles(tc.AxisSizes[1]);
+  for (unsigned y = 0; y < tc.AxisSizes[1]; y++)
   {
-    throw std::runtime_error("Could not open for reading: " + pathToFile);
-  }
-  std::string temp = TileConfiguration<Dimension>::getNextNonCommentLine(tileFile);
-  if (temp.substr(0, 6) == "dim = ")
-  {
-    unsigned dim = std::stoul(temp.substr(6));
-    if (dim != Dimension)
+    tiles[y].resize(tc.AxisSizes[0]);
+    for (unsigned x = 0; x < tc.AxisSizes[0]; x++)
     {
-      throw std::runtime_error("Expected dimension 2, but got " + std::to_string(dim) + " from string:\n\n" + temp);
+      size_t linearIndex = x + y * tc.AxisSizes[0];
+      tiles[y][x] = tc.Tiles[linearIndex];
     }
-    temp = TileConfiguration<Dimension>::getNextNonCommentLine(tileFile); // get next line
-  }
-
-  // read coordinates from files
-  while (tileFile)
-  {
-    TileRow2D tileRow = TileConfiguration<Dimension>::parseRow(temp, tileFile, timePointID);
-    if (xMontageSize == 0)
-    {
-      xMontageSize = tileRow.size(); // we get size from the first row
-    }
-    else // check it is the same size as the first row
-    {
-      assert(xMontageSize == tileRow.size());
-    }
-    tiles.push_back(tileRow);
   }
 
   return tiles;

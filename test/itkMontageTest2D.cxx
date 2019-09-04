@@ -84,9 +84,6 @@ itkMontageTest2D(int argc, char * argv[])
     inputPath += '/';
   }
 
-  itk::TileConfiguration<3> tc;
-  tc.Parse(inputPath + "TileConfiguration.txt");
-
   itk::TileLayout2D stageTiles = itk::ParseTileConfiguration2D(inputPath + "TileConfiguration.txt");
   itk::TileLayout2D actualTiles = itk::ParseTileConfiguration2D(inputPath + "TileConfiguration.registered.txt");
 

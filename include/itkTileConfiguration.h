@@ -233,7 +233,8 @@ struct ITK_TEMPLATE_EXPORT TileConfiguration
     AxisSizes.Fill(1);
     Tiles.clear();
     TileIndexType cInd;
-    unsigned      initializedDimensions = 0; // no dimension has been initialized
+    cInd.Fill(0);
+    unsigned initializedDimensions = 0; // no dimension has been initialized
 
     std::string          timePoint;
     itk::Tile<Dimension> tile = parseLine(line, timePoint);
@@ -258,14 +259,19 @@ struct ITK_TEMPLATE_EXPORT TileConfiguration
 
       if (maxAxis > initializedDimensions) // we now know the size along this dimension
       {
-        AxisSizes[maxAxis - 1] = cInd[maxAxis - 1];
+        AxisSizes[maxAxis - 1] = cInd[maxAxis - 1] + 1;
         initializedDimensions = maxAxis;
       }
-      else // check consistency with previously established size
+
+      // check consistency with previously established size
+      for (unsigned d = 0; d < maxAxis; d++)
       {
-        itkAssertOrThrowMacro(cInd[maxAxis] == AxisSizes[maxAxis] - 1,
-                              "Axis sizes: " << AxisSizes << " current index: " << cInd[maxAxis]
-                                             << ", but we have reached the end along axis " << maxAxis);
+        SizeValueType axisSize = (d == maxAxis - 1) ? AxisSizes[d] : AxisSizes[d] - 1;
+        itkAssertOrThrowMacro(cInd[d] == AxisSizes[d] - 1,
+                              "Axis sizes: " << AxisSizes << " current index: " << cInd
+                                             << ". We have reached the end along axis " << maxAxis
+                                             << "\nIndex along axis " << d << " is " << cInd[d] << ", but it should be "
+                                             << AxisSizes[d] - 1);
       }
 
       // update current tile index
@@ -275,17 +281,22 @@ struct ITK_TEMPLATE_EXPORT TileConfiguration
       }
       ++cInd[maxAxis];
 
+
       if (maxAxis < initializedDimensions) // check bounds, if bounds are established
       {
         itkAssertOrThrowMacro(cInd[maxAxis] < AxisSizes[maxAxis],
                               "Axis sizes: " << AxisSizes << ", but we reached index " << cInd[maxAxis]
-                                             << ". Violation along axis" << maxAxis);
+                                             << ". Violation along axis " << maxAxis);
       }
 
       Tiles.push_back(tile);
       line = getNextNonCommentLine(tileFile);
     }
-    AxisSizes[Dimension - 1] = cInd[Dimension - 1];
+    AxisSizes[Dimension - 1] = cInd[Dimension - 1] + 1;
+
+    size_t expectedSize = this->LinearSize();
+    itkAssertOrThrowMacro(expectedSize == Tiles.size(),
+                          "Incorrect number of tiles: " << Tiles.size() << ". Expected: " << expectedSize);
   }
 
   void

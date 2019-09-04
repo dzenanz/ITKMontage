@@ -111,8 +111,8 @@ itkMontageTest2D(int argc, char * argv[])
                                                                                    writeImage);
     if (doPairs)
     {
-      //r2 = pairwiseTests<unsigned char>(
-      //  stageTiles, actualTiles, inputPath, argv[3], varyPaddingMethods, positionTolerance);
+      r2 = pairwiseTests<unsigned char>(
+        stageTiles, actualTiles, inputPath, argv[3], varyPaddingMethods, positionTolerance);
     }
   }
   else
@@ -131,8 +131,8 @@ itkMontageTest2D(int argc, char * argv[])
                                                 writeImage);
     if (doPairs)
     {
-      //r2 = pairwiseTests<unsigned short>(
-      //  stageTiles, actualTiles, inputPath, argv[3], varyPaddingMethods, positionTolerance);
+      r2 = pairwiseTests<unsigned short>(
+        stageTiles, actualTiles, inputPath, argv[3], varyPaddingMethods, positionTolerance);
     }
   }
 

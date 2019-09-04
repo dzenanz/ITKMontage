@@ -238,17 +238,17 @@ struct ITK_TEMPLATE_EXPORT TileConfiguration
     std::string          timePoint;
     itk::Tile<Dimension> tile = parseLine(line, timePoint);
     Tiles.push_back(tile);
-    line = getNextNonCommentLine(in);
+    line = getNextNonCommentLine(tileFile);
 
-    while (in)
+    while (tileFile)
     {
-      tile = parseLine(line, timePointID);
+      tile = parseLine(line, timePoint);
       // determine dominant axis change
       unsigned maxAxis = 0; // (0=x, 1=y, 2=z etc)
-      double   maxDiff = tile.Position[0] - row.back().Position[0];
+      double   maxDiff = tile.Position[0] - Tiles.back().Position[0];
       for (unsigned d = 1; d < Dimension; d++)
       {
-        double diff = tile.Position[d] - row.back().Position[d];
+        double diff = tile.Position[d] - Tiles.back().Position[d];
         if (diff > maxDiff)
         {
           maxDiff = diff;
@@ -283,7 +283,7 @@ struct ITK_TEMPLATE_EXPORT TileConfiguration
       }
 
       Tiles.push_back(tile);
-      line = getNextNonCommentLine(in);
+      line = getNextNonCommentLine(tileFile);
     }
     AxisSizes[Dimension - 1] = cInd[Dimension - 1];
   }

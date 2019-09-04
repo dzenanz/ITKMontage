@@ -274,42 +274,47 @@ montageTest(const itk::TileConfiguration<Dimension> & stageTiles,
       // make averages
       for (size_t t = 0; t < linearSize; t++)
       {
+        ind = stageTiles.LinearIndexToNDIndex(t);
+        VectorType avg;
+        avg.Fill(0);
+        unsigned   count = 0;
+        for (unsigned d = 0; d < Dimension; d++)
+        {
+          if (ind[d] > 0)
+          {
+            ++count;
+            typename TileConfig::TileIndexType neighborInd = ind;
+            --neighborInd[d];
+            size_t nInd = stageTiles.nDIndexToLinearIndex(neighborInd);
+            avg += regPos[t] - regPos[nInd] - (actualTiles.Tiles[nInd].Position - stageTiles.Tiles[nInd].Position);
+          }
+
+          if (ind[d] < stageTiles.AxisSizes[d] - 1)
+          {
+            ++count;
+            typename TileConfig::TileIndexType neighborInd = ind;
+            ++neighborInd[d];
+            size_t nInd = stageTiles.nDIndexToLinearIndex(neighborInd);
+            avg += regPos[t] - regPos[nInd] - (actualTiles.Tiles[nInd].Position - stageTiles.Tiles[nInd].Position);
+          }
+        }
+
         for (unsigned d = 0; d < Dimension; d++) // iterate over dimension because Vector and Point don't mix well
         {
-          unsigned count = 0;
-          if (x > 0)
-          {
-            ++count;
-            avgPos[y][x][d] += regPos[y][x][d] - regPos[y][x - 1][d] -
-                               (actualTiles[y][x - 1].Position[d] - stageTiles[y][x - 1].Position[d]);
-          }
-          if (x < xMontageSize - 1)
-          {
-            ++count;
-            avgPos[y][x][d] += regPos[y][x][d] - regPos[y][x + 1][d] -
-                               (actualTiles[y][x + 1].Position[d] - stageTiles[y][x + 1].Position[d]);
-          }
-          if (y > 0)
-          {
-            ++count;
-            avgPos[y][x][d] += regPos[y][x][d] - regPos[y - 1][x][d] -
-                               (actualTiles[y - 1][x].Position[d] - stageTiles[y - 1][x].Position[d]);
-          }
-          if (y < yMontageSize - 1)
-          {
-            ++count;
-            avgPos[y][x][d] += regPos[y][x][d] - regPos[y + 1][x][d] -
-                               (actualTiles[y + 1][x].Position[d] - stageTiles[y + 1][x].Position[d]);
-          }
-          avgPos[y][x][d] /= count;
+          avgPos[t][d] = avg[d] / count;
         }
       }
 
       double totalError = 0.0;
       for (size_t t = 0; t < linearSize; t++)
       {
-        std::cout << "(" << x << ", " << y << "): " << regPos[t];
-        registrationErrors << peakMethod << '\t' << x << '\t' << y;
+        ind = stageTiles.LinearIndexToNDIndex(t);
+        std::cout << ind << ": " << regPos[t];
+        registrationErrors << peakMethod;
+        for (unsigned d = 0; d < Dimension; d++)
+        {
+          registrationErrors << '\t' << ind[d];
+        }
 
         // calculate error
         const VectorType & tr = regPos[t]; // translation measured by registration
@@ -347,7 +352,7 @@ montageTest(const itk::TileConfiguration<Dimension> & stageTiles,
       // also allow accumulation of one pixel for each registration - this effectively double the tolerance
       double avgError = 0.5 * totalError / (linearSize - 1);
       avgError /= Dimension; // report per-dimension error
-      registrationErrors << "\nAverage translation error for padding method " << padMethod
+      registrationErrors << "Average translation error for padding method " << padMethod
                          << " and peak interpolation method " << peakMethod << ": " << avgError << std::endl;
       std::cout << "\nAverage translation error for padding method " << padMethod << " and peak interpolation method "
                 << peakMethod << ": " << avgError << std::endl;

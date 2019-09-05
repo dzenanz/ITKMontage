@@ -21,8 +21,9 @@
 #include "itkTileConfiguration.h"
 #include "itkRGBPixel.h"
 
+template <unsigned Dimension>
 int
-itkMontageTest2D(int argc, char * argv[])
+itkMontageTestHelper(int argc, char * argv[], const std::string & inputPath)
 {
   if (argc < 4)
   {
@@ -78,13 +79,8 @@ itkMontageTest2D(int argc, char * argv[])
     writeImage = std::stoi(argv[12]);
   }
 
-  std::string inputPath = argv[1];
-  if (inputPath.back() != '/' && inputPath.back() != '\\')
-  {
-    inputPath += '/';
-  }
 
-  itk::TileConfiguration<2> stageTiles, actualTiles;
+  itk::TileConfiguration<Dimension> stageTiles, actualTiles;
   stageTiles.Parse(inputPath + "TileConfiguration.txt");
   actualTiles.Parse(inputPath + "TileConfiguration.registered.txt");
 
@@ -141,4 +137,33 @@ itkMontageTest2D(int argc, char * argv[])
     return EXIT_FAILURE;
   }
   return EXIT_SUCCESS;
+}
+
+int
+itkMontageTest(int argc, char * argv[])
+{
+  if (argc < 4)
+  {
+    return itkMontageTestHelper<2>(argc, argv, ""); // helper will print the usage
+  }
+
+  std::string inputPath = argv[1];
+  if (inputPath.back() != '/' && inputPath.back() != '\\')
+  {
+    inputPath += '/';
+  }
+
+  unsigned dim;
+  itk::TileConfiguration<2>::TryParse(inputPath + "TileConfiguration.txt", dim);
+
+  switch (dim)
+  {
+    case 2:
+      return itkMontageTestHelper<2>(argc, argv, inputPath);
+    case 3:
+      return itkMontageTestHelper<3>(argc, argv, inputPath);
+    default:
+      std::cerr << "Only dimensions 2 and 3 are supported. You are attempting to montage dimension " << dim;
+      return EXIT_FAILURE;
+  }
 }

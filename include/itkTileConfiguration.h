@@ -336,7 +336,7 @@ using TileLayout2D = std::vector<TileRow2D>;
 /** The tile filenames are taken directly from the configuration file.
  * Path is NOT prepended to them, and they are not otherwise modified. */
 Montage_EXPORT TileLayout2D
-               ParseTileConfiguration2D(const std::string pathToFile);
+ParseTileConfiguration2D(const std::string pathToFile);
 
 /** The path is NOT prepended to tile filenames. */
 Montage_EXPORT void

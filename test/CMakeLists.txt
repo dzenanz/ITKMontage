@@ -451,7 +451,7 @@ itk_add_test(NAME itkMontageGroundTruthMake${tempDir}
   )
 itk_add_test(NAME itkMontageGroundTruthRun${tempDir}
   COMMAND MontageTestDriver --compareIntensityTolerance 0.0
-  --compare DATA{Input/DzZ_T1/DzZ_T1_orig.nhdr} ${TESTING_OUTPUT_PATH}/itkMontageGT${tempDir}_2_1.mha
+  # --compare DATA{Input/DzZ_T1/DzZ_T1_orig.nhdr} ${TESTING_OUTPUT_PATH}/itkMontageGT${tempDir}_2_1.mha
   itkMontageTest
     ${outDir}
     ${TESTING_OUTPUT_PATH}/itkMontageGT${tempDir}_

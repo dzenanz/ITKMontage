@@ -20,19 +20,16 @@
 #include "itkPairwiseTestHelper.hxx"
 #include "itkTileConfiguration.h"
 #include "itkRGBPixel.h"
+#include "itkNumericTraits.h"
 
-template <unsigned Dimension>
+template <typename PixelType, typename AccumulatePixelType, unsigned Dimension>
 int
-itkMontageTestHelper(int argc, char * argv[], const std::string & inputPath)
+itkMontageTestHelper2(int                               argc,
+                      char *                            argv[],
+                      const std::string &               inputPath,
+                      itk::TileConfiguration<Dimension> stageTiles,
+                      itk::TileConfiguration<Dimension> actualTiles)
 {
-  if (argc < 4)
-  {
-    std::cerr << "Usage: " << argv[0] << " <directoryWithInputData> <montageTSV> <mockTSV>";
-    std::cerr << " [ varyPaddingMethods peakMethod loadIntoMemory streamSubdivisions doPairs";
-    std::cerr << " writeTransforms allowDrift positionTolerance writeImage ]" << std::endl;
-    return EXIT_FAILURE;
-  }
-
   bool varyPaddingMethods = true;
   if (argc > 4)
   {
@@ -79,57 +76,23 @@ itkMontageTestHelper(int argc, char * argv[], const std::string & inputPath)
     writeImage = std::stoi(argv[12]);
   }
 
-
-  itk::TileConfiguration<Dimension> stageTiles, actualTiles;
-  stageTiles.Parse(inputPath + "TileConfiguration.txt");
-  actualTiles.Parse(inputPath + "TileConfiguration.registered.txt");
-
-  itk::ImageIOBase::Pointer imageIO = itk::ImageIOFactory::CreateImageIO(
-    (inputPath + stageTiles.Tiles[0].FileName).c_str(), itk::ImageIOFactory::FileModeType::ReadMode);
-  imageIO->SetFileName(inputPath + stageTiles.Tiles[0].FileName);
-  imageIO->ReadImageInformation();
-  const itk::ImageIOBase::IOPixelType pixelType = imageIO->GetPixelType();
-
   int r1, r2 = EXIT_SUCCESS;
-  if (pixelType == itk::ImageIOBase::IOPixelType::RGB)
+  r1 = montageTest<PixelType, AccumulatePixelType>(stageTiles,
+                                                   actualTiles,
+                                                   inputPath,
+                                                   argv[2],
+                                                   varyPaddingMethods,
+                                                   peakMethod,
+                                                   loadIntoMemory,
+                                                   streamSubdivisions,
+                                                   writeTransforms,
+                                                   allowDrift,
+                                                   positionTolerance,
+                                                   writeImage);
+  if (doPairs)
   {
-    r1 = montageTest<itk::RGBPixel<unsigned char>, itk::RGBPixel<unsigned int>>(stageTiles,
-                                                                                actualTiles,
-                                                                                inputPath,
-                                                                                argv[2],
-                                                                                varyPaddingMethods,
-                                                                                peakMethod,
-                                                                                loadIntoMemory,
-                                                                                streamSubdivisions,
-                                                                                writeTransforms,
-                                                                                allowDrift,
-                                                                                positionTolerance,
-                                                                                writeImage);
-    if (doPairs)
-    {
-      r2 = pairwiseTests<unsigned char>(
-        stageTiles, actualTiles, inputPath, argv[3], varyPaddingMethods, positionTolerance);
-    }
-  }
-  else
-  {
-    r1 = montageTest<unsigned short, double>(stageTiles,
-                                             actualTiles,
-                                             inputPath,
-                                             argv[2],
-                                             varyPaddingMethods,
-                                             peakMethod,
-                                             loadIntoMemory,
-                                             streamSubdivisions,
-                                             writeTransforms,
-                                             allowDrift,
-                                             positionTolerance,
-                                             writeImage);
-    if (doPairs)
-    {
-      r2 = pairwiseTests<unsigned short>(
-        stageTiles, actualTiles, inputPath, argv[3], varyPaddingMethods, positionTolerance);
-    }
+    r2 = pairwiseTests<typename itk::NumericTraits<PixelType>::ValueType>(
+      stageTiles, actualTiles, inputPath, argv[3], varyPaddingMethods, positionTolerance);
   }
 
   if (r1 == EXIT_FAILURE || r2 == EXIT_FAILURE)
@@ -139,12 +102,45 @@ itkMontageTestHelper(int argc, char * argv[], const std::string & inputPath)
   return EXIT_SUCCESS;
 }
 
+template <unsigned Dimension>
+int
+itkMontageTestHelper(int argc, char * argv[], const std::string & inputPath)
+{
+  itk::TileConfiguration<Dimension> stageTiles, actualTiles;
+  stageTiles.Parse(inputPath + "TileConfiguration.txt");
+  actualTiles.Parse(inputPath + "TileConfiguration.registered.txt");
+
+  itk::ImageIOBase::Pointer imageIO = itk::ImageIOFactory::CreateImageIO(
+    (inputPath + stageTiles.Tiles[0].FileName).c_str(), itk::ImageIOFactory::FileModeType::ReadMode);
+  imageIO->SetFileName(inputPath + stageTiles.Tiles[0].FileName);
+  imageIO->ReadImageInformation();
+  const itk::ImageIOBase::IOPixelType     pixelType = imageIO->GetPixelType();
+  const itk::ImageIOBase::IOComponentType cType = imageIO->GetComponentType();
+
+  if (pixelType == itk::ImageIOBase::IOPixelType::RGB)
+  {
+    return itkMontageTestHelper2<itk::RGBPixel<unsigned char>, itk::RGBPixel<unsigned int>>(
+      argc, argv, inputPath, stageTiles, actualTiles);
+  }
+  else if (cType == itk::ImageIOBase::IOComponentType::SHORT)
+  {
+    return itkMontageTestHelper2<short, double>(argc, argv, inputPath, stageTiles, actualTiles);
+  }
+  else // cast everything else to USHORT
+  {
+    return itkMontageTestHelper2<unsigned short, double>(argc, argv, inputPath, stageTiles, actualTiles);
+  }
+}
+
 int
 itkMontageTest(int argc, char * argv[])
 {
   if (argc < 4)
   {
-    return itkMontageTestHelper<2>(argc, argv, ""); // helper will print the usage
+    std::cerr << "Usage: " << argv[0] << " <directoryWithInputData> <montageTSV> <mockTSV>";
+    std::cerr << " [ varyPaddingMethods peakMethod loadIntoMemory streamSubdivisions doPairs";
+    std::cerr << " writeTransforms allowDrift positionTolerance writeImage ]" << std::endl;
+    return EXIT_FAILURE;
   }
 
   std::string inputPath = argv[1];

@@ -158,16 +158,16 @@ montageTest(const itk::TileConfiguration<Dimension> & stageTiles,
 
       // show image loading progress
       ind = stageTiles.LinearIndexToNDIndex(t);
-      char symbol = '0';
-      for (int d = Dimension - 1; d >= 0; d--)
+      char digit = '0';
+      for (unsigned d = 0; d < Dimension; d++)
       {
-        if (ind[d] == stageTiles.AxisSizes[d] - 1)
+        if (ind[d] < stageTiles.AxisSizes[d] - 1)
         {
-          symbol += d;
           break;
         }
+        ++digit;
       }
-      std::cout << symbol << std::flush;
+      std::cout << digit << std::flush;
     }
   }
   else
@@ -277,7 +277,7 @@ montageTest(const itk::TileConfiguration<Dimension> & stageTiles,
         ind = stageTiles.LinearIndexToNDIndex(t);
         VectorType avg;
         avg.Fill(0);
-        unsigned   count = 0;
+        unsigned count = 0;
         for (unsigned d = 0; d < Dimension; d++)
         {
           if (ind[d] > 0)

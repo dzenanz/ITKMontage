@@ -63,7 +63,7 @@ CreateGroundTruth(char *                        inFilename,
   }
   regular.Tiles.resize(regular.LinearSize());
   randomized.Tiles.resize(randomized.LinearSize());
-  
+
 
   using MersenneTwister = itk::Statistics::MersenneTwisterRandomVariateGenerator;
   typename MersenneTwister::Pointer randomizer = MersenneTwister::New();

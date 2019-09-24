@@ -124,7 +124,7 @@ montageTest(const itk::TileConfiguration<Dimension> & stageTiles,
   typename ScalarImageType::SpacingType sp;
   itk::ObjectFactoryBase::RegisterFactory(itk::TxtTransformIOFactory::New());
   const size_t              linearSize = stageTiles.LinearSize();
-  TileConfig::TileIndexType origin1;
+  typename TileConfig::TileIndexType origin1;
   for (unsigned d = 0; d < Dimension; d++)
   {
     origin1[d] = stageTiles.AxisSizes[d] > 1 ? 1 : 0; // support montages of size 1 along a dimension
@@ -252,7 +252,7 @@ montageTest(const itk::TileConfiguration<Dimension> & stageTiles,
 
       std::vector<VectorType> regPos(linearSize); // translations measured by registration
       // translations using average translation to neighbors and neighbors' ground truth
-      std::vector<TileConfig::PointType> avgPos(linearSize);
+      std::vector<typename TileConfig::PointType> avgPos(linearSize);
       for (size_t t = 0; t < linearSize; t++)
       {
         ind = stageTiles.LinearIndexToNDIndex(t);

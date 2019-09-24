@@ -59,9 +59,6 @@ struct ITK_TEMPLATE_EXPORT TileConfiguration
 
   std::vector<TileND> Tiles;
 
-  static double_conversion::StringToDoubleConverter stringConverter;
-  static double_conversion::DoubleToStringConverter doubleConverter;
-
   size_t
   LinearSize() const
   {
@@ -103,6 +100,10 @@ struct ITK_TEMPLATE_EXPORT TileConfiguration
                           "Linear tile index " << linearIndex << " exceeds total montage size " << stride);
     return ind;
   }
+
+protected:
+  static double_conversion::StringToDoubleConverter stringConverter;
+  static double_conversion::DoubleToStringConverter doubleConverter;
 
   static std::string
   getNextNonCommentLine(std::istream & in)
@@ -161,6 +162,7 @@ struct ITK_TEMPLATE_EXPORT TileConfiguration
     return tile;
   }
 
+public:
   // tries parsing the file, return first file name and set dimension
   static std::string
   TryParse(const std::string & pathToFile, unsigned & dimension)

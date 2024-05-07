@@ -1,7 +1,7 @@
 itk_wrap_include("itkLinearInterpolateImageFunction.h")
 itk_wrap_include("itkNearestNeighborInterpolateImageFunction.h")
 itk_wrap_class("itk::TileMergeImageFilter" POINTER)
-  foreach(iif "LinearInterpolateImageFunction;NearestNeighborInterpolateImageFunction")
+  foreach(iif LinearInterpolateImageFunction NearestNeighborInterpolateImageFunction)
     if (${iif} STREQUAL "LinearInterpolateImageFunction")
       set(abbr "L")  # abbreviation to use in Python wrapping type name
     else()

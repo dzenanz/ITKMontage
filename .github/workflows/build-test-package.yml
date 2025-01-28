@@ -4,7 +4,7 @@ on: [push,pull_request]
 
 jobs:
   cxx-build-workflow:
-    uses: InsightSoftwareConsortium/ITKRemoteModuleBuildTestPackageAction/.github/workflows/build-test-cxx.yml@v5.4.2
+    uses: InsightSoftwareConsortium/ITKRemoteModuleBuildTestPackageAction/.github/workflows/build-test-cxx.yml@removeMacOS14
     with:
       cmake-options: "Module_Montage_BUILD_EXAMPLES:BOOL=ON"
 
